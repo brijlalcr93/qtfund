@@ -1,0 +1,408 @@
+/* trading.css - Vanilla CSS for Trading Terminal */
+
+.trading-container {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  background-color: #131722;
+  color: #ffffff;
+  padding-top: 0;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+}
+
+.trading-sidebar-left {
+  width: 256px;
+  background-color: #1e222d;
+  border-right: 1px solid #2B2B43;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+.trading-search-container {
+  padding: 1rem;
+  border-bottom: 1px solid #2B2B43;
+}
+
+.trading-search-input {
+  width: 100%;
+  background-color: #131722;
+  border: 1px solid #2B2B43;
+  border-radius: 6px;
+  padding: 8px 12px 8px 36px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+.trading-search-input:focus {
+  border-color: #26a69a;
+}
+
+.trading-tabs {
+  display: flex;
+  border-bottom: 1px solid #2B2B43;
+}
+
+.trading-tab {
+  flex: 1;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.trading-tab.active {
+  color: #26a69a;
+  border-bottom: 2px solid #26a69a;
+}
+
+.trading-pairs-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.trading-pair-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(43, 43, 67, 0.3);
+  border-left: 4px solid transparent;
+}
+
+.trading-pair-item:hover {
+  background-color: #2a2e39;
+}
+
+.trading-pair-item.active {
+  background-color: #2a2e39;
+  border-left-color: #26a69a;
+}
+
+.trading-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.trading-header {
+  height: 56px;
+  background-color: #1e222d;
+  border-bottom: 1px solid #2B2B43;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+
+.trading-chart-area {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  background-color: #131722;
+}
+
+.trading-bottom-panel {
+  height: 256px;
+  background-color: #1e222d;
+  border-top: 1px solid #2B2B43;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.trading-bottom-tabs {
+  height: 40px;
+  border-bottom: 1px solid #2B2B43;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 24px;
+  flex-shrink: 0;
+}
+
+.trading-bottom-tab {
+  height: 100%;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.trading-bottom-tab.active {
+  color: #26a69a;
+  border-bottom: 2px solid #26a69a;
+}
+
+.trading-sidebar-right {
+  width: 288px;
+  background-color: #1e222d;
+  border-left: 1px solid #2B2B43;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  overflow-y: auto;
+}
+
+/* Order Panel CSS */
+.order-panel {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.order-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #2B2B43;
+  padding-bottom: 8px;
+}
+
+.order-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.order-input-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.order-input-wrapper {
+  display: flex;
+  background-color: #131722;
+  border: 1px solid #2B2B43;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.order-btn-small {
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+.order-btn-small:hover {
+  background-color: #2B2B43;
+}
+
+.order-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  text-align: center;
+  padding: 8px 0;
+  outline: none;
+  width: 100%;
+}
+
+.order-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.order-actions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn-sell {
+  width: 100%;
+  background-color: #ef5350;
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+}
+.btn-sell:hover { background-color: #d32f2f; }
+
+.btn-buy {
+  width: 100%;
+  background-color: #26a69a;
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+}
+.btn-buy:hover { background-color: #00897b; }
+
+/* Positions Table CSS */
+.positions-summary {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 8px 16px;
+  background-color: #131722;
+  border-bottom: 1px solid #2B2B43;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.summary-value {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.text-green { color: #26a69a; }
+.text-red { color: #ef5350; }
+
+.positions-table-container {
+  flex: 1;
+  overflow: auto;
+}
+
+.positions-table {
+  width: 100%;
+  text-align: left;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.positions-table th {
+  padding: 12px 16px;
+  font-weight: normal;
+  color: #94a3b8;
+  font-size: 12px;
+  position: sticky;
+  top: 0;
+  background-color: #1e222d;
+  border-bottom: 1px solid #2B2B43;
+  z-index: 5;
+}
+
+.positions-table td {
+  padding: 8px 16px;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(43, 43, 67, 0.5);
+}
+
+.positions-table tr:hover td {
+  background-color: #2a2e39;
+}
+
+.btn-close {
+  background-color: #2B2B43;
+  color: #e2e8f0;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.btn-close:hover {
+  background-color: #ef5350;
+  color: white;
+}
+
+/* Mobile Navigation Bar & Responsive Overrides */
+.trading-mobile-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .trading-container {
+    flex-direction: column !important;
+    height: 100% !important;
+    padding-top: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .trading-mobile-nav {
+    display: flex !important;
+    background-color: #1e222d;
+    border-bottom: 1px solid #2B2B43;
+    width: 100%;
+    z-index: 20;
+    flex-shrink: 0;
+  }
+
+  .trading-mobile-nav button {
+    flex: 1;
+    padding: 12px 0;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .trading-mobile-nav button.active {
+    color: #26a69a;
+    border-bottom-color: #26a69a;
+    background-color: rgba(38, 166, 154, 0.05);
+  }
+
+  /* Control visibility of components on mobile */
+  .mobile-hidden {
+    display: none !important;
+  }
+
+  .mobile-visible {
+    display: flex !important;
+    width: 100% !important;
+    flex: 1 !important;
+    height: 100% !important;
+  }
+
+  .trading-sidebar-left,
+  .trading-sidebar-right,
+  .trading-main {
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+  }
+
+  .trading-chart-area {
+    height: 100% !important;
+  }
+
+  .trading-bottom-panel {
+    height: 100% !important;
+  }
+
+  .market-badge-hide {
+    display: none !important; /* Hide badge on mobile header to save space */
+  }
+}

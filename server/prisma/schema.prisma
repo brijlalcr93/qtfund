@@ -1,0 +1,294 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ChallengeStatus {
+  ACTIVE
+  PASSED
+  FAILED
+  EXPIRED
+  RESET
+}
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PayoutStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model User {
+  id                   String   @id @default(uuid())
+  email                String   @unique
+  password             String
+  name                 String
+  role                 UserRole @default(USER)
+  isVerified           Boolean  @default(false)
+  verificationToken    String?
+  resetToken           String?
+  resetTokenExpiry     DateTime?
+  twoFactorEnabled     Boolean  @default(false)
+  twoFactorSecret      String?
+  isSuspended          Boolean  @default(false)
+  isBanned             Boolean  @default(false)
+  balance              Float    @default(0)
+  totalDeposited       Float    @default(0)
+  totalWithdrawn       Float    @default(0)
+  affiliateCode        String?  @unique
+  commissionRate       Float    @default(10)
+  referredBy           String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  challenges          UserChallenge[]
+  payments            Payment[]
+  payouts             Payout[]
+  kycSubmissions      Kyc[]
+  tickets             Ticket[]
+  ticketMessages      TicketMessage[]
+  notifications       Notification[]
+  refreshTokens       RefreshToken[]
+  referrals           Referral[]       @relation("Referrals")
+  affiliateEarnings   AffiliateEarning[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model ChallengePlan {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  price         Float
+  accountSize   Float
+  profitTarget  Float
+  maxDrawdown   Float
+  durationDays  Int
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  userChallenges UserChallenge[]
+
+  @@map("challenge_plans")
+}
+
+model UserChallenge {
+  id                String          @id @default(uuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId            String
+  plan              ChallengePlan   @relation(fields: [planId], references: [id])
+  status            ChallengeStatus @default(ACTIVE)
+  currentBalance    Float           @default(0)
+  peakBalance       Float           @default(0)
+  profit            Float           @default(0)
+  trades            Int             @default(0)
+  startDate         DateTime        @default(now())
+  endDate           DateTime
+  lastActivityDate  DateTime        @default(now())
+  resetCount        Int             @default(0)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@map("user_challenges")
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount          Float
+  currency        String        @default("INR")
+  gateway         String
+  gatewayOrderId  String?
+  gatewayPaymentId String?
+  gatewaySignature String?
+  status          PaymentStatus @default(PENDING)
+  description     String?
+  challengePlanId String?
+  couponCode      String?
+  discountAmount  Float         @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@map("payments")
+}
+
+model Payout {
+  id            String       @id @default(uuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        Float
+  fee           Float        @default(0)
+  netAmount     Float
+  gateway       String?
+  accountDetails String?
+  status        PayoutStatus @default(PENDING)
+  adminNote     String?
+  processedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("payouts")
+}
+
+model Kyc {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName        String
+  dateOfBirth     String?
+  nationality     String?
+  address         String?
+  city            String?
+  state           String?
+  postalCode      String?
+  country         String?
+  documentType    String
+  documentNumber  String?
+  documentFront   String
+  documentBack    String?
+  selfie          String?
+  status          KycStatus @default(PENDING)
+  adminFeedback   String?
+  submittedAt     DateTime  @default(now())
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("kyc_submissions")
+}
+
+model Ticket {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  description String
+  priority    String        @default("MEDIUM")
+  status      TicketStatus  @default(OPEN)
+  assignedTo  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  messages    TicketMessage[]
+
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id        String   @id @default(uuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  message   String
+  isStaff   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("ticket_messages")
+}
+
+model Referral {
+  id            String   @id @default(uuid())
+  referrerId    String
+  referrer      User     @relation("Referrals", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredEmail String
+  referredId    String?
+  commission    Float    @default(0)
+  isConverted   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@map("referrals")
+}
+
+model AffiliateEarning {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Float
+  source      String
+  referenceId String?
+  isPaid      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@map("affiliate_earnings")
+}
+
+model Coupon {
+  code         String   @id
+  discountType String
+  discountValue Float
+  minAmount    Float?
+  maxUsage     Int?
+  usedCount    Int      @default(0)
+  validFrom    DateTime
+  validUntil   DateTime
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@map("coupons")
+}
+
+model CmsSetting {
+  key   String @id
+  value String
+
+  @@map("cms_settings")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO")
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}

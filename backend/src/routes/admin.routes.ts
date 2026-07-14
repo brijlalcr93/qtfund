@@ -5,15 +5,6 @@ import { authenticateToken, requireRole, AuthenticatedRequest } from '../middlew
 
 const router = Router();
 
-// In-memory CMS Settings store for simulation
-let cmsSettings: Record<string, string> = {
-  homepageTitle: 'Institutional-Grade Funding.',
-  homepageSubtitle: 'Unlock up to $1M in institutional trading capital. Keep up to 90% of the profits with zero drawdown liability.',
-  pricingTitle: 'Choose Your Challenge.',
-  pricingSubtitle: 'Select from our evaluation frameworks designed to measure consistency and reward professional risk parameters.',
-  announcement: '🔥 FLASH SALE: Use coupon WELCOME15 for 15% off all 2-Step challenges! Ending soon.'
-};
-
 // Apply auth + Admin check to all admin routes
 router.use(authenticateToken);
 router.use(requireRole(['Super Admin', 'Admin', 'Finance Manager', 'Support Agent']));
@@ -208,18 +199,49 @@ router.post('/email/send', async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-// GET /api/admin/cms (Matches adminApi.getCms)
-router.get('/cms', (req, res) => {
-  res.json(cmsSettings);
+// GET /api/admin/cms (Matches adminApi.getCms) — reads from the persisted cms_settings table
+// instead of an in-memory object, so edits survive a server restart.
+router.get('/cms', async (req, res) => {
+  try {
+    const result = await db.query('SELECT key, value FROM cms_settings');
+    const settings: Record<string, string> = {};
+    result.rows.forEach((row: { key: string; value: string }) => {
+      settings[row.key] = row.value;
+    });
+    res.json(settings);
+  } catch (error) {
+    console.error('Failed to load CMS settings:', error);
+    res.status(500).json({ error: 'Failed to load CMS settings' });
+  }
 });
 
 // POST /api/admin/cms (Matches adminApi.saveCms)
-router.post('/cms', (req, res) => {
+router.post('/cms', async (req, res) => {
   const { settings } = req.body;
-  if (!settings) return res.status(400).json({ error: 'Settings object required' });
+  if (!settings || typeof settings !== 'object') {
+    return res.status(400).json({ error: 'Settings object required' });
+  }
 
-  cmsSettings = { ...cmsSettings, ...settings };
-  res.json({ message: 'CMS Settings saved successfully', settings: cmsSettings });
+  try {
+    for (const [key, value] of Object.entries(settings)) {
+      await db.query(
+        `INSERT INTO cms_settings (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+        [key, String(value)]
+      );
+    }
+
+    const result = await db.query('SELECT key, value FROM cms_settings');
+    const allSettings: Record<string, string> = {};
+    result.rows.forEach((row: { key: string; value: string }) => {
+      allSettings[row.key] = row.value;
+    });
+
+    res.json({ message: 'CMS Settings saved successfully', settings: allSettings });
+  } catch (error) {
+    console.error('Failed to save CMS settings:', error);
+    res.status(500).json({ error: 'Failed to save CMS settings' });
+  }
 });
 
 // GET /api/admin/analytics (Matches adminApi.getAnalytics)
@@ -384,6 +406,25 @@ router.delete('/coupons/:code', async (req: AuthenticatedRequest, res: Response)
   } catch (error) {
     console.error('Failed deleting coupon:', error);
     res.status(500).json({ error: 'Failed deleting coupon' });
+  }
+});
+
+// GET /api/admin/affiliates (Directory list — matches adminApi's AffiliateItem shape)
+router.get('/affiliates', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const affiliates = await db.query(`
+      SELECT u.id, u.email, u.full_name as name, ap.referral_code as "affiliateCode",
+             ap.commission_percent as "commissionRate", ap.created_at as "createdAt",
+             ap.total_earned as "totalEarnings",
+             json_build_object('referrals', (SELECT COUNT(*) FROM referrals WHERE affiliate_id = ap.id)) as "_count"
+      FROM affiliate_profiles ap
+      JOIN users u ON u.id = ap.user_id
+      ORDER BY ap.created_at DESC
+    `);
+    res.json(affiliates.rows);
+  } catch (error) {
+    console.error('Failed to retrieve affiliate directory:', error);
+    res.status(500).json({ error: 'Failed to retrieve affiliate directory' });
   }
 });
 

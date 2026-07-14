@@ -147,6 +147,14 @@ export const adminApi = {
     api.get<{ payments: PaymentItem[]; pagination: any }>(`/admin/payments?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`),
   getChallenges: (page = 1, limit = 20, status?: string) =>
     api.get<{ challenges: ChallengeItem[]; pagination: any }>(`/admin/challenges?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`),
+  // Directory-style admin list endpoints — these return plain arrays (no pagination wrapper),
+  // matching backend/src/routes/admin.routes.ts's /admin/users, /admin/kyc, /admin/payouts,
+  // /admin/coupons, /admin/affiliates handlers exactly.
+  getUsers: () => api.get<UserItem[]>('/admin/users'),
+  getAllKyc: () => api.get<KycItem[]>('/admin/kyc'),
+  getAllPayouts: () => api.get<PayoutItem[]>('/admin/payouts'),
+  getAllCoupons: () => api.get<CouponItem[]>('/admin/coupons'),
+  getAllAffiliates: () => api.get<AffiliateItem[]>('/admin/affiliates'),
   upgradeChallenge: (id: string, additionalBalance?: number) =>
     api.post(`/admin/challenges/${id}/upgrade`, { additionalBalance }),
   disableChallenge: (id: string) =>
@@ -184,6 +192,7 @@ export const adminApi = {
   createChallengePlan: (data: {
     name: string; price: number; accountSize: number;
     profitTarget: number; maxDrawdown: number; durationDays: number;
+    type: '1-Step' | '2-Step' | 'Instant'; dailyLoss?: number; profitTargetPhase2?: number;
     description?: string;
   }) => api.post('/challenges', data),
   deleteChallengePlan: (id: string) => api.del(`/challenges/${id}`),

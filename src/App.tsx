@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Auth from './pages/Auth';
 import Checkout from './pages/Checkout';
+import CryptoReturn from './pages/CryptoReturn';
 import Dashboard from './pages/Dashboard';
 import Payouts from './pages/Payouts';
 import FAQPage from './pages/FAQPage';
@@ -42,6 +43,7 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+              <Route path="/checkout/crypto-return" element={<ProtectedRoute><CryptoReturn /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/payouts" element={<ProtectedRoute><Payouts /></ProtectedRoute>} />
               <Route path="/faq" element={<FAQPage />} />
@@ -49,7 +51,7 @@ function App() {
               <Route path="/blog" element={<Blog />} />
               <Route path="/blog/:slug" element={<BlogPost />} />
               <Route path="/legal/:slug" element={<Legal />} />
-              <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute allowedRoles={['Super Admin', 'Admin', 'Support Agent', 'Finance Manager', 'Affiliate Manager']}><AdminPanel /></ProtectedRoute>} />
             </Routes>
           </div>
         </div>

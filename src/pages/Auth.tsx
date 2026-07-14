@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RotateCw, Mail, ArrowLeft, Key } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, type AppUser } from '../contexts/AuthContext';
 import { api, ApiError } from '../lib/api';
 
 type AuthView = 'login' | 'signup' | 'reset-password' | 'otp-verify' | 'two-factor';
 
+function routeForRole(role: string) {
+  const adminRoles = ['Admin', 'Super Admin', 'Support Agent', 'Finance Manager', 'Affiliate Manager'];
+  return adminRoles.includes(role) ? '/admin' : '/dashboard';
+}
+
 export default function Auth() {
   const navigate = useNavigate();
-  const { user, signIn, signUp } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { user, signIn, verify2FA, signUp } = useAuth();
 
   const [view, setView] = useState<AuthView>('login');
   const [loading, setLoading] = useState(false);
@@ -20,15 +26,18 @@ export default function Auth() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // CAPTCHA State (For Sign In)
-  const [captchaCode, setCaptchaCode] = useState('');
+  // CAPTCHA State (For Sign In) — real server-side challenge, not a client-generated string.
+  const [captchaId, setCaptchaId] = useState('');
+  const [captchaQuestion, setCaptchaQuestion] = useState('');
   const [captchaInput, setCaptchaInput] = useState('');
 
   // Verification OTP State (For Registration)
   const [otpInput, setOtpInput] = useState('');
 
-  // 2FA State (For Login)
+  // 2FA State (For Login) — real TOTP code verified against the server, plus the pending
+  // userId returned by /auth/login when the account has 2FA enabled.
   const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [pendingUserId, setPendingUserId] = useState('');
 
   // Redirect to dashboard if already authenticated
   useEffect(() => {
@@ -37,15 +46,17 @@ export default function Auth() {
     }
   }, [user, navigate]);
 
-  // Generate CAPTCHA
-  const generateCaptcha = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-    let code = '';
-    for (let i = 0; i < 5; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+  // Fetch a real CAPTCHA challenge from the server
+  const generateCaptcha = async () => {
+    try {
+      const data = await api.get<{ captchaId: string; question: string }>('/auth/captcha');
+      setCaptchaId(data.captchaId);
+      setCaptchaQuestion(data.question);
+      setCaptchaInput('');
+    } catch {
+      setCaptchaId('');
+      setCaptchaQuestion('');
     }
-    setCaptchaCode(code);
-    setCaptchaInput('');
   };
 
   useEffect(() => {
@@ -62,30 +73,21 @@ export default function Auth() {
 
     try {
       if (view === 'login') {
-        // 1. Validate CAPTCHA
-        if (captchaInput.toLowerCase() !== captchaCode.toLowerCase()) {
-          setErrorMsg('Invalid CAPTCHA verification code. Please retry.');
-          generateCaptcha();
-          setLoading(false);
-          return;
-        }
+        const result = await signIn(email, password, captchaId, captchaInput);
 
-        // Check if 2FA is active for this email (or local storage key `quantum_2fa_active` is true)
-        const is2FAActive = localStorage.getItem('quantum_2fa_active') === 'true' || email === 'admin@quantum.com';
-
-        if (is2FAActive) {
-          // Pause login and redirect to 2FA screen
+        if (result.status === 'requires2FA') {
+          setPendingUserId(result.userId);
           setView('two-factor');
           setLoading(false);
           return;
         }
 
-        // Standard Login
-        await proceedToLogin();
-      } 
-      
+        navigate(routeForRole(result.user.role));
+      }
+
       else if (view === 'signup') {
-        const registeredUser = await signUp(email, password, fullName);
+        const referralCode = searchParams.get('ref') || undefined;
+        await signUp(email, password, fullName, referralCode);
         navigate('/dashboard');
         return;
       }
@@ -95,36 +97,12 @@ export default function Auth() {
         setSuccessMsg(`If an account exists for ${email}, a password reset link has been dispatched. Please also check your spam folder.`);
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Authentication error.');
-      setLoading(false);
-    }
-  };
-
-  const proceedToLogin = async () => {
-    setLoading(true);
-    setErrorMsg('');
-
-    try {
-      const loggedInUser = await signIn(email, password);
-
-      // Route admin roles to admin panel, everyone else to dashboard
-      if (
-        loggedInUser.role === 'Admin' ||
-        loggedInUser.role === 'Super Admin' ||
-        loggedInUser.role === 'Support Agent' ||
-        loggedInUser.role === 'Finance Manager' ||
-        loggedInUser.role === 'Affiliate Manager'
-      ) {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
-    } catch (err) {
       if (err instanceof ApiError) {
-        setErrorMsg(err.message || 'Invalid email or password');
+        setErrorMsg(err.message || 'Authentication error.');
       } else {
-        setErrorMsg('Cannot connect to server. Please try again later.');
+        setErrorMsg(err.message || 'Cannot connect to server. Please try again later.');
       }
+      if (view === 'login') generateCaptcha();
       setLoading(false);
     }
   };
@@ -134,18 +112,18 @@ export default function Auth() {
     setView('login');
   };
 
-  const handleVerify2FA = (e: React.FormEvent) => {
+  const handleVerify2FA = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg('');
 
-    setTimeout(async () => {
-      if (twoFactorCode === '999999' || twoFactorCode.length === 6) {
-        await proceedToLogin();
-      } else {
-        setErrorMsg('Invalid Google Authenticator code. Enter 999999 to bypass.');
-        setLoading(false);
-      }
-    }, 1500);
+    try {
+      const loggedInUser: AppUser = await verify2FA(pendingUserId, twoFactorCode);
+      navigate(routeForRole(loggedInUser.role));
+    } catch (err: any) {
+      setErrorMsg(err instanceof ApiError ? err.message : 'Invalid authenticator code.');
+      setLoading(false);
+    }
   };
 
   const handleGoogleSignUp = async () => {
@@ -292,7 +270,7 @@ export default function Auth() {
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                   <div style={captchaContainerStyle}>
                     <span style={captchaTextStyle}>
-                      {captchaCode}
+                      {captchaQuestion ? `${captchaQuestion} = ?` : '...'}
                     </span>
                   </div>
                   <button
@@ -305,8 +283,8 @@ export default function Auth() {
                   </button>
                 </div>
                 <input
-                  type="text"
-                  placeholder="Type characters above"
+                  type="number"
+                  placeholder="Enter the answer above"
                   style={inputStyle}
                   value={captchaInput}
                   onChange={(e) => setCaptchaInput(e.target.value)}
@@ -369,17 +347,17 @@ export default function Auth() {
             <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
               <Key size={32} style={{ color: '#a855f7', marginBottom: '0.5rem' }} />
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                Two-Factor Security is active on this account. Open your Google Authenticator app and enter the 6-digit security code. (Use **999999** for mockup bypass).
+                Two-Factor Security is active on this account. Open your authenticator app and enter the current 6-digit security code.
               </p>
             </div>
-            
+
             <div>
               <label style={labelStyle}>Authenticator Code</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 maxLength={6}
-                placeholder="999999" 
-                style={inputStyle} 
+                placeholder="123456"
+                style={inputStyle}
                 value={twoFactorCode}
                 onChange={(e) => setTwoFactorCode(e.target.value)}
                 required 

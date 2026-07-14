@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { db } from '../config/db';
-import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth';
+
+const PAYOUT_ADMIN_ROLES = ['Super Admin', 'Admin', 'Finance Manager'];
 
 const router = Router();
 
@@ -33,8 +35,11 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     }
     const account = accResult.rows[0];
 
-    if (account.status !== 'Funded') {
-      return res.status(403).json({ error: 'Only active funded partner accounts are eligible for payouts' });
+    // Verify the account is fully funded (phase 3), still compliant, and not breached — an
+    // account can only reach status='Funded' via phase 3, but check both explicitly since they
+    // are now independently tracked columns rather than a single conflated status enum.
+    if (account.phase !== 3 || account.status === 'Breached' || !account.compliance) {
+      return res.status(403).json({ error: 'This account is locked, not yet funded, or has rule violations. Payout denied.' });
     }
 
     const availableProfit = parseFloat(account.balance) - parseFloat(account.initial_balance);
@@ -45,9 +50,9 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     // 2. Insert payout request
     const payoutId = 'PAY-' + Math.floor(1000 + Math.random() * 9000);
     const newPayout = await db.query(
-      `INSERT INTO payouts (id, user_id, name, amount, method, status, country)
-      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [payoutId, req.user.id, req.user.fullName, amount, method, 'Pending', country]
+      `INSERT INTO payouts (id, user_id, name, amount, method, status, country, account_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [payoutId, req.user.id, req.user.fullName, amount, method, 'Pending', country, accountId]
     );
 
     // 3. Deduct amount from account balance/equity to prevent double-spending
@@ -65,7 +70,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
 });
 
 // PUT /api/payouts/:id/approve
-router.put('/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id/approve', authenticateToken, requireRole(PAYOUT_ADMIN_ROLES), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   try {
     const updated = await db.query("UPDATE payouts SET status = 'Approved' WHERE id = $1 RETURNING *", [id]);
@@ -77,26 +82,56 @@ router.put('/:id/approve', authenticateToken, async (req: AuthenticatedRequest, 
 });
 
 // PUT /api/payouts/:id/reject
-router.put('/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id/reject', authenticateToken, requireRole(PAYOUT_ADMIN_ROLES), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const { reason } = req.body;
   try {
+    const existing = await db.query('SELECT * FROM payouts WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Payout not found' });
+    const payout = existing.rows[0];
+
+    if (payout.status === 'Rejected' || payout.status === 'Paid') {
+      return res.status(400).json({ error: `Payout is already ${payout.status.toLowerCase()} and cannot be modified` });
+    }
+
     const updated = await db.query("UPDATE payouts SET status = 'Rejected', rejection_reason = $1 WHERE id = $2 RETURNING *", [reason || 'Rejected by admin', id]);
-    if (updated.rows.length === 0) return res.status(404).json({ error: 'Payout not found' });
+
+    // Restore the deducted amount to the source account so the trader isn't shorted.
+    if (payout.account_id) {
+      await db.query(
+        'UPDATE trading_accounts SET balance = balance + $1, equity = equity + $1 WHERE id = $2',
+        [payout.amount, payout.account_id]
+      );
+    }
+
     res.json(updated.rows[0]);
   } catch (error) {
+    console.error('Failed to reject payout:', error);
     res.status(500).json({ error: 'Failed to reject payout' });
   }
 });
 
 // PUT /api/payouts/:id/complete
-router.put('/:id/complete', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id/complete', authenticateToken, requireRole(PAYOUT_ADMIN_ROLES), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   try {
+    const existing = await db.query('SELECT * FROM payouts WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Payout not found' });
+    const payout = existing.rows[0];
+
+    if (payout.status === 'Rejected' || payout.status === 'Paid') {
+      return res.status(400).json({ error: `Payout is already ${payout.status.toLowerCase()} and cannot be modified` });
+    }
+
     const updated = await db.query("UPDATE payouts SET status = 'Paid' WHERE id = $1 RETURNING *", [id]);
-    if (updated.rows.length === 0) return res.status(404).json({ error: 'Payout not found' });
+
+    if (payout.user_id) {
+      await db.query('UPDATE users SET earnings = earnings + $1 WHERE id = $2', [payout.amount, payout.user_id]);
+    }
+
     res.json(updated.rows[0]);
   } catch (error) {
+    console.error('Failed to complete payout:', error);
     res.status(500).json({ error: 'Failed to complete payout' });
   }
 });

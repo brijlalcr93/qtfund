@@ -13,6 +13,7 @@ import supportRoutes from './routes/support.routes';
 import affiliateRoutes from './routes/affiliate.routes';
 import couponsRouter from './routes/coupon.routes';
 import challengesRouter from './routes/challenge.routes';
+import cryptoPaymentRoutes from './routes/crypto-payment.routes';
 
 dotenv.config();
 
@@ -39,6 +40,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/affiliates', affiliateRoutes);
 app.use('/api/coupons', couponsRouter);
 app.use('/api/challenges', challengesRouter);
+app.use('/api/payments/crypto', cryptoPaymentRoutes);
 
 // Health Check
 app.get('/health', (req, res) => {

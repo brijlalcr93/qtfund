@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { db } from '../config/db';
-import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -103,8 +103,8 @@ router.get('/track/:code', async (req, res) => {
   }
 });
 
-// PUT /api/affiliates/:userId/commission
-router.put('/:userId/commission', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+// PUT /api/affiliates/:userId/commission (Admin only)
+router.put('/:userId/commission', authenticateToken, requireRole(['Super Admin', 'Admin', 'Affiliate Manager']), async (req: AuthenticatedRequest, res: Response) => {
   const { userId } = req.params;
   const { commissionRate } = req.body;
   if (commissionRate === undefined) return res.status(400).json({ error: 'commissionRate required' });

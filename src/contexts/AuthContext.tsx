@@ -11,11 +11,16 @@ export interface AppUser {
   createdAt: string;
 }
 
+export type SignInResult =
+  | { status: 'success'; user: AppUser }
+  | { status: 'requires2FA'; userId: string };
+
 type AuthContextType = {
   user: AppUser | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<AppUser>;
-  signUp: (email: string, password: string, fullName: string) => Promise<AppUser>;
+  signIn: (email: string, password: string, captchaId: string, captchaAnswer: string) => Promise<SignInResult>;
+  verify2FA: (userId: string, code: string) => Promise<AppUser>;
+  signUp: (email: string, password: string, fullName: string, referralCode?: string) => Promise<AppUser>;
   signOut: () => void;
 };
 
@@ -23,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   signIn: async () => { throw new Error('AuthProvider not mounted'); },
+  verify2FA: async () => { throw new Error('AuthProvider not mounted'); },
   signUp: async () => { throw new Error('AuthProvider not mounted'); },
   signOut: () => {},
 });
@@ -116,12 +122,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Sign In ────────────────────────────────────────────────────────────────
-  const signIn = async (email: string, password: string): Promise<AppUser> => {
+  const signIn = async (email: string, password: string, captchaId: string, captchaAnswer: string): Promise<SignInResult> => {
+    const data = await api.post<{
+      requires2FA?: boolean;
+      userId?: string;
+      token?: string;
+      refreshToken?: string;
+      user?: AppUser;
+    }>('/auth/login', { email, password, captchaId, captchaAnswer });
+
+    if (data.requires2FA) {
+      return { status: 'requires2FA', userId: data.userId! };
+    }
+
+    persistSession(data.token!, data.refreshToken, data.user!);
+    setUser(data.user!);
+    return { status: 'success', user: data.user! };
+  };
+
+  // ── Verify 2FA (second step of login when the account has TOTP enabled) ────
+  const verify2FA = async (userId: string, code: string): Promise<AppUser> => {
     const data = await api.post<{
       token: string;
       refreshToken?: string;
       user: AppUser;
-    }>('/auth/login', { email, password });
+    }>('/auth/verify-2fa', { userId, code });
 
     persistSession(data.token, data.refreshToken, data.user);
     setUser(data.user);
@@ -129,12 +154,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // ── Sign Up ────────────────────────────────────────────────────────────────
-  const signUp = async (email: string, password: string, fullName: string): Promise<AppUser> => {
+  const signUp = async (email: string, password: string, fullName: string, referralCode?: string): Promise<AppUser> => {
     const data = await api.post<{
       token: string;
       refreshToken?: string;
       user: AppUser;
-    }>('/auth/register', { email, password, fullName });
+    }>('/auth/register', { email, password, fullName, referralCode });
 
     persistSession(data.token, data.refreshToken, data.user);
     setUser(data.user);
@@ -148,7 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, verify2FA, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

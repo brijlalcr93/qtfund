@@ -1,8 +1,9 @@
 import { Router, Response } from 'express';
 import { db } from '../config/db';
-import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
+const KYC_ADMIN_ROLES = ['Super Admin', 'Admin', 'Support Agent'];
 
 // GET /api/kyc
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
@@ -70,7 +71,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
 });
 
 // PUT /api/kyc/:userId/approve
-router.put('/:userId/approve', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/:userId/approve', authenticateToken, requireRole(KYC_ADMIN_ROLES), async (req: AuthenticatedRequest, res: Response) => {
   const { userId } = req.params;
   try {
     const updated = await db.query("UPDATE kyc_submissions SET status = 'Approved' WHERE user_id = $1 RETURNING *", [userId]);
@@ -83,7 +84,7 @@ router.put('/:userId/approve', authenticateToken, async (req: AuthenticatedReque
 });
 
 // PUT /api/kyc/:userId/reject
-router.put('/:userId/reject', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/:userId/reject', authenticateToken, requireRole(KYC_ADMIN_ROLES), async (req: AuthenticatedRequest, res: Response) => {
   const { userId } = req.params;
   const { feedback } = req.body;
   try {

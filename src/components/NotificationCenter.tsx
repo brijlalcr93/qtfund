@@ -15,8 +15,8 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useNotifications } from '../hooks/useNotifications';
+import type { Notification, NotificationType } from '../hooks/useNotifications';
 import { useNavigate } from 'react-router-dom';
-import type { Notification, NotificationType } from '../types';
 
 const typeIcons: Record<NotificationType, typeof Info> = {
   INFO: Info,

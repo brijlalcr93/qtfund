@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { db } from '../config/db';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { finalizePurchase } from '../services/purchaseService';
 
 const router = Router();
 
@@ -37,109 +38,20 @@ router.post('/accounts', authenticateToken, async (req: AuthenticatedRequest, re
   }
 
   try {
-    // 1. Fetch challenge details
-    const pkgResult = await db.query('SELECT * FROM challenge_plans WHERE id = $1', [packageId]);
-    if (pkgResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Challenge package not found' });
-    }
-    const pkg = pkgResult.rows[0];
-
-    // Calculate pricing with coupon if provided
-    let finalAmount = parseFloat(pkg.price.replace(/[$,]/g, ''));
-    if (couponCode) {
-      const couponResult = await db.query('SELECT * FROM coupons WHERE code = $1 AND active = TRUE AND expiry_date > CURRENT_TIMESTAMP', [couponCode.toUpperCase()]);
-      if (couponResult.rows.length > 0) {
-        const coupon = couponResult.rows[0];
-        if (coupon.usage_count < coupon.usage_limit) {
-          const discount = finalAmount * (parseFloat(coupon.discount_percent) / 100);
-          finalAmount -= discount;
-          // Increment usage count
-          await db.query('UPDATE coupons SET usage_count = usage_count + 1 WHERE code = $1', [coupon.code]);
-        }
-      }
-    }
-
-    // 2. Generate Account details
-    const accountSize = parseFloat(pkg.size.replace(/[$,]/g, ''));
-    const accountId = Math.floor(10000000 + Math.random() * 90000000).toString();
-    const serverName = pkg.type === 'Instant' ? 'Quantum-Live-Pro' : `Quantum-Evaluation-${pkg.type === '1-Step' ? '1' : '2'}`;
-    const initialStatus = pkg.type === 'Instant' ? 'Funded' : 'Phase 1';
-
-    // Set drawdown thresholds based on rules
-    let maxDrawdownLimit = - (accountSize * 0.10); // Default 10%
-    let dailyDrawdownLimit = - (accountSize * 0.05); // Default 5%
-    let profitTarget = accountSize * 0.08; // Default 8% for Phase 1
-    let tradingDaysRequired = 10;
-
-    pkg.rules.forEach((rule: { label: string; value: string }) => {
-      if (rule.label === 'Max Overall Loss') {
-        const pct = parseFloat(rule.value.replace('%', ''));
-        maxDrawdownLimit = - (accountSize * (pct / 100));
-      }
-      if (rule.label === 'Max Daily Loss') {
-        const pct = parseFloat(rule.value.replace('%', ''));
-        dailyDrawdownLimit = - (accountSize * (pct / 100));
-      }
-      if (rule.label === 'Profit Target') {
-        if (rule.value === 'None') profitTarget = 0;
-        else {
-          const match = rule.value.match(/(\d+)%/);
-          if (match) profitTarget = accountSize * (parseFloat(match[1]) / 100);
-        }
-      }
-      if (rule.label === 'Minimum Trading Days') {
-        const days = parseInt(rule.value);
-        tradingDaysRequired = isNaN(days) ? 0 : days;
-      }
-    });
-
-    const mockEquityHistory = [{ day: '1', equity: accountSize }];
-
-    // 3. Insert account
-    const newAccount = await db.query(
-      `INSERT INTO trading_accounts 
-      (id, user_id, name, status, balance, initial_balance, equity, leverage, server, platform, profit_target, daily_drawdown_limit, max_drawdown_limit, trading_days_required, equity_history)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      RETURNING *`,
-      [
-        accountId,
-        req.user.id,
-        `${pkg.size} ${pkg.type} Challenge`,
-        initialStatus,
-        accountSize,
-        accountSize,
-        accountSize,
-        '1:100',
-        serverName,
-        'MetaTrader 5',
-        profitTarget,
-        dailyDrawdownLimit,
-        maxDrawdownLimit,
-        tradingDaysRequired,
-        JSON.stringify(mockEquityHistory)
-      ]
-    );
-
-    // 4. Save Payment record
     const transactionRef = 'TXN-' + Math.floor(100000 + Math.random() * 900000);
-    await db.query(
-      `INSERT INTO payments (user_id, user_name, user_email, amount, description, method, status, transaction_ref)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        req.user.id,
-        req.user.fullName,
-        req.user.email,
-        finalAmount,
-        `Purchase of ${pkg.size} ${pkg.type} Challenge`,
-        'Stripe',
-        'Paid',
-        transactionRef
-      ]
+    const newAccount = await finalizePurchase(
+      { id: req.user.id, fullName: req.user.fullName, email: req.user.email },
+      packageId,
+      couponCode,
+      'Stripe',
+      transactionRef
     );
-
-    res.status(201).json(newAccount.rows[0]);
-  } catch (error) {
+    res.status(201).json(newAccount);
+  } catch (error: any) {
     console.error('Failed to purchase challenge:', error);
+    if (error?.message === 'Challenge package not found') {
+      return res.status(404).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Purchase failed' });
   }
 });
@@ -159,11 +71,12 @@ router.post('/accounts/:id/reset', authenticateToken, async (req: AuthenticatedR
     // Reset account logic
     const resetResult = await db.query(
       `UPDATE trading_accounts
-      SET status = 'Phase 1', balance = initial_balance, equity = initial_balance,
+      SET status = 'Phase 1', phase = 1, compliance = TRUE, violations = '[]'::jsonb,
+          balance = initial_balance, equity = initial_balance, phase_start_balance = initial_balance,
           daily_drawdown_current = 0, max_drawdown_current = 0, trading_days_current = 0,
           win_rate = 0.00, trades_count = 0, equity_history = $1::jsonb
       WHERE id = $2 RETURNING *`,
-      [JSON.stringify([{ day: '1', equity: parseFloat(acc.initial_balance) }]), id]
+      [JSON.stringify([{ day: '1', equity: parseFloat(acc.initial_balance), balance: parseFloat(acc.initial_balance) }]), id]
     );
 
     res.json(resetResult.rows[0]);
@@ -173,14 +86,16 @@ router.post('/accounts/:id/reset', authenticateToken, async (req: AuthenticatedR
   }
 });
 
-// POST /api/dashboard/accounts/:id/simulate-trade (to populate/manipulate account metrics for testing)
+// POST /api/dashboard/accounts/:id/simulate-trade
+// Server computes the simulated P/L (ported from testprop's win/loss bands) rather than trusting
+// a client-supplied profitAmount — the account owner can trigger a trade, but not dictate its size.
 router.post('/accounts/:id/simulate-trade', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   const { id } = req.params;
-  const { profitAmount, isWin } = req.body;
+  const { result } = req.body;
 
-  if (profitAmount === undefined) {
-    return res.status(400).json({ error: 'profitAmount required' });
+  if (result !== 'win' && result !== 'loss') {
+    return res.status(400).json({ error: "result must be 'win' or 'loss'" });
   }
 
   try {
@@ -188,51 +103,96 @@ router.post('/accounts/:id/simulate-trade', authenticateToken, async (req: Authe
     if (checkAccount.rows.length === 0) {
       return res.status(404).json({ error: 'Trading account not found' });
     }
-    
+
     const acc = checkAccount.rows[0];
-    const newBalance = parseFloat(acc.balance) + parseFloat(profitAmount);
-    const newEquity = newBalance;
-    const newTradesCount = acc.trades_count + 1;
-    
-    // Recalculate win rate
-    const winsCount = isWin ? Math.round(acc.win_rate * acc.trades_count / 100) + 1 : Math.round(acc.win_rate * acc.trades_count / 100);
-    const newWinRate = parseFloat(((winsCount / newTradesCount) * 100).toFixed(1));
-
-    // Append equity history
-    const history = Array.isArray(acc.equity_history) ? acc.equity_history : [];
-    const nextDay = (history.length + 1).toString();
-    const newHistory = [...history, { day: nextDay, equity: newEquity }];
-
-    // Drawdowns
-    const startingBalance = parseFloat(acc.initial_balance);
-    const maxDrawdownCurrent = newEquity - startingBalance;
-    const dailyDrawdownCurrent = parseFloat(acc.daily_drawdown_current) + (profitAmount < 0 ? parseFloat(profitAmount) : 0);
-
-    // Rule violations
-    let updatedStatus = acc.status;
-    if (newEquity <= (startingBalance + parseFloat(acc.max_drawdown_limit))) {
-      updatedStatus = 'Breached';
-    } else if (dailyDrawdownCurrent <= parseFloat(acc.daily_drawdown_limit)) {
-      updatedStatus = 'Breached';
+    if (acc.status === 'Breached') {
+      return res.status(400).json({ error: 'This account has already failed limits and is disabled.' });
     }
 
-    // Auto-advance challenge if targets met
-    if (updatedStatus === 'Phase 1' && (newEquity >= startingBalance + parseFloat(acc.profit_target))) {
-      updatedStatus = 'Phase 2';
-    } else if (updatedStatus === 'Phase 2' && (newEquity >= startingBalance + parseFloat(acc.profit_target))) {
-      updatedStatus = 'Funded';
+    const size = parseFloat(acc.initial_balance);
+    const changeAmt = result === 'win'
+      ? Math.round(size * (0.015 + Math.random() * 0.02) * 100) / 100
+      : -Math.round(size * (0.012 + Math.random() * 0.018) * 100) / 100;
+
+    const newBalance = Math.round((parseFloat(acc.balance) + changeAmt) * 100) / 100;
+    const newEquity = Math.round((parseFloat(acc.equity) + changeAmt) * 100) / 100;
+    const newTradesCount = acc.trades_count + 1;
+
+    const winsCount = result === 'win' ? Math.round(acc.win_rate * acc.trades_count / 100) + 1 : Math.round(acc.win_rate * acc.trades_count / 100);
+    const newWinRate = parseFloat(((winsCount / newTradesCount) * 100).toFixed(1));
+
+    const history = Array.isArray(acc.equity_history) ? acc.equity_history : [];
+    const nextDay = (history.length + 1).toString();
+    const newHistory = [...history, { day: nextDay, equity: newEquity, balance: newBalance }];
+
+    const violations: string[] = Array.isArray(acc.violations) ? [...acc.violations] : [];
+    let status = acc.status;
+    let phase = acc.phase;
+    let compliance = acc.compliance;
+    let phaseStartBalance = parseFloat(acc.phase_start_balance);
+    let message = `Trade executed successfully: ${result === 'win' ? 'Profit' : 'Loss'} of $${Math.abs(changeAmt).toLocaleString()}`;
+
+    const startingBalance = parseFloat(acc.initial_balance);
+    const maxDrawdownCurrent = newEquity - startingBalance;
+    const dailyDrawdownCurrent = parseFloat(acc.daily_drawdown_current) + (changeAmt < 0 ? changeAmt : 0);
+
+    if (maxDrawdownCurrent <= parseFloat(acc.max_drawdown_limit)) {
+      compliance = false;
+      status = 'Breached';
+      violations.push(`Maximum Drawdown Limit Exceeded: Equity dropped to $${newEquity.toLocaleString()} (Max Loss: $${Math.abs(parseFloat(acc.max_drawdown_limit)).toLocaleString()})`);
+      message = 'Drawdown violation! The maximum overall loss limit has been breached. Account deactivated.';
+    } else if (dailyDrawdownCurrent <= parseFloat(acc.daily_drawdown_limit)) {
+      compliance = false;
+      status = 'Breached';
+      violations.push(`Daily Drawdown Limit Exceeded: Equity dropped to $${newEquity.toLocaleString()} (Daily Limit: $${Math.abs(parseFloat(acc.daily_drawdown_limit)).toLocaleString()})`);
+      message = 'Drawdown violation! The daily maximum loss limit has been breached. Account deactivated.';
+    } else if (compliance && phase < 3) {
+      // Profit-target check is measured from phase_start_balance (the balance when the CURRENT
+      // phase began), not from the account's original size — so Phase 2 requires a genuine
+      // additional gain rather than being auto-satisfied by Phase 1's (larger) target.
+      const currentPhaseProfit = newEquity - phaseStartBalance;
+      const targetProfit = phase === 1 ? parseFloat(acc.profit_target) : parseFloat(acc.profit_target_phase2 ?? '0');
+
+      if (targetProfit > 0 && currentPhaseProfit >= targetProfit) {
+        if (phase === 1) {
+          phase = 2;
+          status = 'Phase 2';
+          phaseStartBalance = newEquity;
+          message = `Congratulations! You have passed Phase 1. Promoting account to Phase 2 ($${size.toLocaleString()} Challenge).`;
+        } else if (phase === 2) {
+          phase = 3;
+          status = 'Funded';
+          phaseStartBalance = newEquity;
+          message = `Outstanding! You have passed Phase 2. Your funded account credentials are now active at $${size.toLocaleString()}.`;
+
+          const refundTxRef = 'TXN-' + Math.floor(100000 + Math.random() * 900000);
+          await db.query(
+            `INSERT INTO payments (user_id, user_name, user_email, amount, description, method, status, transaction_ref)
+            VALUES ($1, $2, $3, $4, $5, 'Stripe', 'Refunded', $6)`,
+            [
+              req.user.id,
+              req.user.fullName,
+              req.user.email,
+              size === 10000 ? 89 : size === 50000 ? 299 : size === 100000 ? 499 : 39,
+              'Evaluation fee refund processed for passing the challenge',
+              refundTxRef
+            ]
+          );
+        }
+      }
     }
 
     const updatedAccount = await db.query(
       `UPDATE trading_accounts
       SET balance = $1, equity = $2, trades_count = $3, win_rate = $4,
           equity_history = $5::jsonb, max_drawdown_current = $6, daily_drawdown_current = $7,
-          status = $8, trading_days_current = trading_days_current + 1
-      WHERE id = $9 RETURNING *`,
-      [newBalance, newEquity, newTradesCount, newWinRate, JSON.stringify(newHistory), maxDrawdownCurrent, dailyDrawdownCurrent, updatedStatus, id]
+          status = $8, phase = $9, compliance = $10, violations = $11::jsonb, phase_start_balance = $12,
+          trading_days_current = trading_days_current + 1
+      WHERE id = $13 RETURNING *`,
+      [newBalance, newEquity, newTradesCount, newWinRate, JSON.stringify(newHistory), maxDrawdownCurrent, dailyDrawdownCurrent, status, phase, compliance, JSON.stringify(violations), phaseStartBalance, id]
     );
 
-    res.json(updatedAccount.rows[0]);
+    res.json({ ...updatedAccount.rows[0], message });
   } catch (error) {
     console.error('Failed to simulate trade:', error);
     res.status(500).json({ error: 'Simulation failed' });

@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Phone, MapPin, Send, MessageSquare, Bot } from 'lucide-react';
 import { usePlatformStore } from '../store/platformStore';
-import type { SupportTicket } from '../store/platformStore';
 import { useAuth } from '../contexts/AuthContext';
 import Footer from '../components/Footer';
 
@@ -23,6 +22,7 @@ export default function ContactPage() {
   const [formMessage, setFormMessage] = useState('');
   const [formCategory, setFormCategory] = useState('Technical');
   const [formSuccess, setFormSuccess] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Live Chat Simulator State
 
@@ -41,30 +41,24 @@ export default function ContactPage() {
     scrollToBottom();
   }, [chatMessages, agentTyping]);
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Log ticket in store
-    const ticketId = 'TKT-' + Math.floor(1000 + Math.random() * 9000);
-    const newTicket: SupportTicket = {
-      id: ticketId,
-      userId: user?.id || 'anonymous-visitor',
-      subject: formSubject,
-      category: formCategory,
-      status: 'Open',
-      date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-      messages: [{ sender: 'User', text: formMessage, time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }]
-    };
+    setFormError('');
 
-    addTicket(newTicket);
-    setFormSuccess(true);
-    setFormSubject('');
-    setFormMessage('');
+    if (!user) {
+      setFormError('Please sign in to submit a support ticket.');
+      return;
+    }
 
-    // Trigger BOT response inside chat if appropriate, or simulate reply in ticket logs
-    setTimeout(() => {
-      setFormSuccess(false);
-    }, 4000);
+    try {
+      await addTicket(formSubject, formCategory, formMessage);
+      setFormSuccess(true);
+      setFormSubject('');
+      setFormMessage('');
+      setTimeout(() => setFormSuccess(false), 4000);
+    } catch {
+      setFormError('Failed to submit ticket. Please try again.');
+    }
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -203,6 +197,26 @@ export default function ContactPage() {
                 }}
               >
                 ✓ Ticket submitted successfully! Review it in your Dashboard logs.
+              </motion.div>
+            )}
+
+            {formError && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid #ef4444',
+                  color: '#ef4444',
+                  padding: '1rem',
+                  borderRadius: '12px',
+                  marginBottom: '1.5rem',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  textAlign: 'center'
+                }}
+              >
+                {formError}
               </motion.div>
             )}
 

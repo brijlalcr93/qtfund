@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { db } from '../config/db';
-import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -62,8 +62,8 @@ router.post('/checkout', authenticateToken, async (req: AuthenticatedRequest, re
   }
 });
 
-// POST /api/payments/refund
-router.post('/refund', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+// POST /api/payments/refund (Admin only)
+router.post('/refund', authenticateToken, requireRole(['Super Admin', 'Admin', 'Finance Manager']), async (req: AuthenticatedRequest, res: Response) => {
   const { paymentId } = req.body;
   if (!paymentId) return res.status(400).json({ error: 'paymentId required' });
   try {

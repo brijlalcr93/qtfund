@@ -1,7 +1,19 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { create } from 'zustand';
 import { api } from '../lib/api';
-import type { Notification } from '../types';
+
+export type NotificationType = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' | 'PAYOUT' | 'CHALLENGE' | 'KYC' | 'TRADE' | 'AFFILIATE';
+
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  isRead: boolean;
+  link?: string;
+  createdAt: string;
+}
 
 interface NotificationState {
   notifications: Notification[];

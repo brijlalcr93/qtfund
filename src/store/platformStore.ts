@@ -14,6 +14,9 @@ export interface TradingAccount {
   id: string;
   name: string;
   status: 'Funded' | 'Phase 1' | 'Phase 2' | 'Breached';
+  phase: number;
+  compliance: boolean;
+  violations: string[];
   balance: number;
   initialBalance: number;
   equity: number;
@@ -30,7 +33,7 @@ export interface TradingAccount {
   maxDrawdownCurrent: number;
   tradingDaysCurrent: number;
   tradingDaysRequired: number;
-  equityHistory: { day: string; equity: number }[];
+  equityHistory: { day: string; equity: number; balance: number }[];
 }
 
 export interface BlogPost {
@@ -182,7 +185,7 @@ interface PlatformState {
   addUserAccount: (packageId: string, couponCode?: string) => Promise<void>;
   resetUserAccount: (id: string) => Promise<void>;
   updateUserAccount: (id: string, updated: Partial<TradingAccount>) => Promise<void>;
-  simulateTrade: (id: string, profitAmount: number, isWin: boolean) => Promise<void>;
+  simulateTrade: (id: string, result: 'win' | 'loss') => Promise<void>;
 }
 
 const defaultFAQ = [
@@ -256,27 +259,32 @@ export const usePlatformStore = create<PlatformState>()(
 
           set({
             challengePackages: packages,
-            userAccounts: accounts.map(a => ({
+            // The backend returns raw Postgres rows (snake_case columns), not camelCase —
+            // read from the actual response shape here rather than nonexistent camelCase keys.
+            userAccounts: accounts.map((a: any) => ({
               id: a.id,
               name: a.name,
               status: a.status,
-              balance: parseFloat(a.balance as any),
-              initialBalance: parseFloat(a.initialBalance as any),
-              equity: parseFloat(a.equity as any),
+              phase: a.phase,
+              compliance: a.compliance,
+              violations: Array.isArray(a.violations) ? a.violations : [],
+              balance: parseFloat(a.balance),
+              initialBalance: parseFloat(a.initial_balance),
+              equity: parseFloat(a.equity),
               leverage: a.leverage,
               server: a.server,
               platform: a.platform,
-              createdDate: new Date(a.createdDate || (a as any).created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-              winRate: parseFloat(a.winRate as any),
-              tradesCount: a.tradesCount,
-              profitTarget: parseFloat(a.profitTarget as any),
-              dailyDrawdownLimit: parseFloat(a.dailyDrawdownLimit as any),
-              dailyDrawdownCurrent: parseFloat(a.dailyDrawdownCurrent as any),
-              maxDrawdownLimit: parseFloat(a.maxDrawdownLimit as any),
-              maxDrawdownCurrent: parseFloat(a.maxDrawdownCurrent as any),
-              tradingDaysCurrent: a.tradingDaysCurrent,
-              tradingDaysRequired: a.tradingDaysRequired,
-              equityHistory: (a as any).equity_history || a.equityHistory || []
+              createdDate: new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+              winRate: parseFloat(a.win_rate),
+              tradesCount: a.trades_count,
+              profitTarget: parseFloat(a.profit_target),
+              dailyDrawdownLimit: parseFloat(a.daily_drawdown_limit),
+              dailyDrawdownCurrent: parseFloat(a.daily_drawdown_current),
+              maxDrawdownLimit: parseFloat(a.max_drawdown_limit),
+              maxDrawdownCurrent: parseFloat(a.max_drawdown_current),
+              tradingDaysCurrent: a.trading_days_current,
+              tradingDaysRequired: a.trading_days_required,
+              equityHistory: Array.isArray(a.equity_history) ? a.equity_history : []
             })),
             recentPayouts: payouts.map(p => ({
               id: p.id,
@@ -321,7 +329,6 @@ export const usePlatformStore = create<PlatformState>()(
           const kycList = await api.get<KycSubmission[]>('/admin/kyc');
           const payouts = await api.get<PayoutItem[]>('/admin/payouts');
           const coupons = await api.get<Coupon[]>('/admin/coupons');
-          const metrics = await api.get<any>('/admin/metrics');
 
           set({
             adminUsersList: users,
@@ -463,7 +470,7 @@ export const usePlatformStore = create<PlatformState>()(
         }
       },
 
-      claimAffiliatePayout: async (userId) => {
+      claimAffiliatePayout: async () => {
         try {
           await api.post('/affiliates/claim-payout');
           await get().syncWithBackend();
@@ -497,10 +504,11 @@ export const usePlatformStore = create<PlatformState>()(
           await get().syncWithBackend();
         } catch (error) {
           console.error('Support ticket creation failed:', error);
+          throw error;
         }
       },
 
-      replyToTicket: async (id, sender, text) => {
+      replyToTicket: async (id, _sender, text) => {
         try {
           await api.post(`/support/tickets/${id}/messages`, { text });
           await get().syncWithBackend();
@@ -545,6 +553,7 @@ export const usePlatformStore = create<PlatformState>()(
           await get().syncWithBackend();
         } catch (error) {
           console.error('Account purchase failed:', error);
+          throw error;
         }
       },
 
@@ -570,12 +579,13 @@ export const usePlatformStore = create<PlatformState>()(
         }
       },
 
-      simulateTrade: async (id, profitAmount, isWin) => {
+      simulateTrade: async (id, result) => {
         try {
-          await api.post(`/dashboard/accounts/${id}/simulate-trade`, { profitAmount, isWin });
+          await api.post(`/dashboard/accounts/${id}/simulate-trade`, { result });
           await get().syncWithBackend();
         } catch (error) {
           console.error('Trade simulation failed:', error);
+          throw error;
         }
       }
     }),

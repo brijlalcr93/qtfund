@@ -1,8 +1,9 @@
 import { Router, Response } from 'express';
 import { db } from '../config/db';
-import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
+const COUPON_ADMIN_ROLES = ['Super Admin', 'Admin', 'Affiliate Manager'];
 
 // GET /api/coupons/check/:code
 router.get('/check/:code', async (req, res) => {
@@ -26,7 +27,7 @@ router.get('/check/:code', async (req, res) => {
 });
 
 // POST /api/coupons (Admin only)
-router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/', authenticateToken, requireRole(COUPON_ADMIN_ROLES), async (req: AuthenticatedRequest, res: Response) => {
   const { code, discountValue, validUntil, maxUsage } = req.body;
   if (!code || !discountValue || !validUntil) {
     return res.status(400).json({ error: 'Missing required parameters' });
@@ -59,7 +60,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
 });
 
 // DELETE /api/coupons/:code (Admin only)
-router.delete('/:code', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:code', authenticateToken, requireRole(COUPON_ADMIN_ROLES), async (req: AuthenticatedRequest, res: Response) => {
   const { code } = req.params;
   try {
     await db.query('DELETE FROM coupons WHERE code = $1', [code.toUpperCase()]);

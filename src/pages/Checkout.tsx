@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DollarSign, Wallet, ChevronLeft } from 'lucide-react';
 import { usePlatformStore } from '../store/platformStore';
-import type { TradingAccount, TransactionItem } from '../store/platformStore';
+import type { ChallengePackage } from '../store/platformStore';
 import { useAuth } from '../contexts/AuthContext';
+import { api, ApiError } from '../lib/api';
 
 type PaymentGateway = 'Stripe' | 'PayPal' | 'Razorpay' | 'Crypto';
 
@@ -12,9 +13,8 @@ export default function Checkout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  
-  // Platform Store Actions
-  const { useCoupon, addUserAccount, addTransaction, affiliates, addReferral } = usePlatformStore();
+
+  const { addUserAccount } = usePlatformStore();
 
   const planDetails = location.state || {
     type: '2-Step Challenge',
@@ -22,12 +22,29 @@ export default function Checkout() {
     price: '$449'
   };
 
+  // Resolve the real backend challenge_plans row matching this plan's type/size, since the
+  // purchase API needs a real packageId, not just display strings.
+  const [matchedPackage, setMatchedPackage] = useState<ChallengePackage | null>(null);
+  const [loadingPackage, setLoadingPackage] = useState(true);
+
+  useEffect(() => {
+    api.get<ChallengePackage[]>('/dashboard/packages')
+      .then((packages) => {
+        const typePrefix = planDetails.type.replace(' Challenge', '');
+        const match = packages.find(p => p.type === typePrefix && p.size === planDetails.size);
+        setMatchedPackage(match || null);
+      })
+      .catch(() => setMatchedPackage(null))
+      .finally(() => setLoadingPackage(false));
+  }, [planDetails.type, planDetails.size]);
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentGateway>('Stripe');
   const [couponCode, setCouponCode] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [couponError, setCouponError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [purchaseError, setPurchaseError] = useState('');
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
 
   // Form states
@@ -37,115 +54,55 @@ export default function Checkout() {
   const [cardNumber, setCardNumber] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cvc, setCvc] = useState('');
-  const [cryptoCurrency, setCryptoCurrency] = useState('USDT');
 
   const basePriceNum = parseFloat(planDetails.price.replace(/[$,]/g, ''));
   const discountAmount = basePriceNum * (discountPercent / 100);
   const finalPrice = basePriceNum - discountAmount;
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     setCouponError('');
-    
-    // Check if valid in platformStore
-    const coupons = usePlatformStore.getState().coupons;
-    const matched = coupons.find(c => c.code.toUpperCase() === couponCode.toUpperCase() && c.active);
-    
-    if (matched) {
-      if (matched.usageCount >= matched.usageLimit) {
-        setCouponError('Coupon usage limit reached.');
-        return;
+
+    try {
+      const result = await api.get<{ active: boolean; discountPercent?: number }>(`/coupons/check/${couponCode.toUpperCase()}`);
+      if (result.active) {
+        setDiscountPercent(result.discountPercent || 0);
+        setCouponApplied(true);
+      } else {
+        setCouponError('Invalid, expired, or fully-redeemed coupon code.');
       }
-      useCoupon(matched.code); // increment usage
-      setDiscountPercent(matched.discountPercent);
-      setCouponApplied(matched.code.toUpperCase() === 'WELCOME15' ? true : true);
-      setCouponApplied(true);
-    } else {
-      setCouponError('Invalid or expired coupon code.');
+    } catch {
+      setCouponError('Could not validate coupon. Please try again.');
     }
   };
 
-  const handleCompletePurchase = (e: React.FormEvent) => {
+  const handleCompletePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPurchaseError('');
+
+    if (!matchedPackage) {
+      setPurchaseError('This challenge package is not currently available. Please pick a plan from the Pricing page.');
+      return;
+    }
+
     setIsProcessing(true);
-
-    setTimeout(() => {
-      // Create new trading account
-      const cleanSize = planDetails.size.replace(/[$,]/g, '');
-      const initialBalance = parseFloat(cleanSize);
-      
-      const newAccountId = Math.floor(10000000 + Math.random() * 90000000).toString();
-      
-      // Determine rules based on type
-      const isInstant = planDetails.type.toLowerCase().includes('instant');
-      const isOneStep = planDetails.type.toLowerCase().includes('1-step');
-      
-      let profitTarget = initialBalance * 0.08;
-      let drawdownLimit = - (initialBalance * 0.05);
-      let maxDrawdown = - (initialBalance * 0.10);
-      let tradingDaysRequired = 10;
-      
-      if (isInstant) {
-        profitTarget = 0;
-        drawdownLimit = - (initialBalance * 0.05);
-        maxDrawdown = - (initialBalance * 0.10);
-        tradingDaysRequired = 0;
-      } else if (isOneStep) {
-        profitTarget = initialBalance * 0.10;
-        drawdownLimit = - (initialBalance * 0.04);
-        maxDrawdown = - (initialBalance * 0.06);
-        tradingDaysRequired = 0;
+    try {
+      if (paymentMethod === 'Crypto') {
+        const { invoiceUrl } = await api.post<{ orderRef: string; invoiceUrl: string }>('/payments/crypto/create-invoice', {
+          packageId: matchedPackage.id,
+          couponCode: couponApplied ? couponCode.toUpperCase() : undefined
+        });
+        window.location.href = invoiceUrl;
+        return;
       }
 
-      const newAccount: TradingAccount = {
-        id: newAccountId,
-        name: `${planDetails.size} ${planDetails.type}`,
-        status: isInstant ? 'Funded' : 'Phase 1',
-        balance: initialBalance,
-        initialBalance: initialBalance,
-        equity: initialBalance,
-        leverage: isInstant ? '1:50' : '1:100',
-        server: isInstant ? 'Quantum-Live-Pro' : 'Quantum-Evaluation-1',
-        platform: 'MetaTrader 5',
-        createdDate: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-        winRate: 0,
-        tradesCount: 0,
-        profitTarget: profitTarget,
-        dailyDrawdownLimit: drawdownLimit,
-        dailyDrawdownCurrent: 0,
-        maxDrawdownLimit: maxDrawdown,
-        maxDrawdownCurrent: 0,
-        tradingDaysCurrent: 0,
-        tradingDaysRequired: tradingDaysRequired,
-        equityHistory: [{ day: '1', equity: initialBalance }]
-      };
-
-      // Create transaction log
-      const tx: TransactionItem = {
-        id: 'TXN-' + Math.floor(10000 + Math.random() * 90000),
-        userId: user?.id || 'offline-mock-user',
-        userName: firstName ? `${firstName} ${lastName}` : (user?.fullName || 'Quantum Trader'),
-        userEmail: email || user?.email || 'trader@quantum.com',
-        amount: finalPrice,
-        description: `Purchase: ${planDetails.size} ${planDetails.type}`,
-        method: paymentMethod,
-        status: 'Paid',
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-      };
-
-      // Trigger referral commission if affiliate code matches
-      // Look up if any affiliate referrer has a referral code for this user or mock user
-      const referrerId = 'google-mock-brijlalcr'; // seed mock referrer
-      if (affiliates[referrerId]) {
-        const commission = finalPrice * (affiliates[referrerId].commissionPercent / 100);
-        addReferral(referrerId, tx.userName, 'Purchased', commission);
-      }
-
-      addUserAccount(newAccount);
-      addTransaction(tx);
-      setIsProcessing(false);
+      await addUserAccount(matchedPackage.id, couponApplied ? couponCode.toUpperCase() : undefined);
       setPurchaseSuccess(true);
-    }, 2000);
+    } catch (err) {
+      setPurchaseError(err instanceof ApiError ? err.message : 'Purchase failed. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -309,7 +266,25 @@ export default function Checkout() {
 
               {/* Sub Forms */}
               <form onSubmit={handleCompletePurchase} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                
+
+                {loadingPackage && (
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center' }}>
+                    Verifying challenge availability...
+                  </div>
+                )}
+
+                {!loadingPackage && !matchedPackage && (
+                  <div style={{ color: '#ef4444', fontSize: '0.85rem', textAlign: 'center', background: 'rgba(239,68,68,0.05)', padding: '0.8rem', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.1)' }}>
+                    This challenge package could not be matched to an available plan. Please return to Pricing and select a plan again.
+                  </div>
+                )}
+
+                {purchaseError && (
+                  <div style={{ color: '#ef4444', fontSize: '0.85rem', textAlign: 'center', background: 'rgba(239,68,68,0.05)', padding: '0.8rem', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.1)' }}>
+                    {purchaseError}
+                  </div>
+                )}
+
                 {/* Billing Info */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
@@ -391,64 +366,32 @@ export default function Checkout() {
                   </div>
                 )}
 
-                {/* Crypto fields */}
+                {/* Crypto: handled by BitPay's own hosted checkout — no address/QR needed here */}
                 {paymentMethod === 'Crypto' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                    <div>
-                      <label style={labelStyle}>Select Crypto Network</label>
-                      <select 
-                        value={cryptoCurrency} 
-                        onChange={(e) => setCryptoCurrency(e.target.value)} 
-                        style={{
-                          width: '100%',
-                          padding: '0.8rem 1rem',
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid var(--glass-border)',
-                          borderRadius: '8px',
-                          color: 'var(--text-primary)',
-                          fontSize: '1rem',
-                          outline: 'none',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <option value="USDT">USDT (TRC20 / ERC20)</option>
-                        <option value="USDC">USDC (ERC20 / Polygon)</option>
-                        <option value="BTC">Bitcoin (BTC Network)</option>
-                        <option value="ETH">Ethereum (ERC20)</option>
-                      </select>
+                  <div style={{
+                    padding: '1.5rem',
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px dashed var(--glass-border)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    fontSize: '0.85rem'
+                  }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--accent-cyan)' }}>
+                      <Wallet size={16} />
+                      <strong>Pay with Bitcoin, Ethereum, or other supported crypto</strong>
                     </div>
-
-                    <div style={{
-                      padding: '1.5rem',
-                      background: 'rgba(255,255,255,0.02)',
-                      border: '1px dashed var(--glass-border)',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.5rem',
-                      fontSize: '0.85rem'
-                    }}>
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--accent-cyan)' }}>
-                        <Wallet size={16} />
-                        <strong>Transfer Deposit Address:</strong>
-                      </div>
-                      <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)', wordBreak: 'break-all', marginTop: '0.3rem', background: 'rgba(0,0,0,0.3)', padding: '0.5rem', borderRadius: '6px' }}>
-                        {cryptoCurrency === 'USDT' && 'TYVp892XNzN14m12oK12h32uPnV92HkLaQ'}
-                        {cryptoCurrency === 'USDC' && '0x42f89028cb20183e890cdba92e01bcf91e848201'}
-                        {cryptoCurrency === 'BTC' && '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'}
-                        {cryptoCurrency === 'ETH' && '0x71C7656EC7ab88b098defB751B7401B5f6d8976F'}
-                      </span>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.3rem' }}>
-                        Send exactly the equivalent of **${finalPrice.toFixed(2)}** to the address above. Transfers are monitored and auto-confirmed in 1 confirmation.
-                      </span>
-                    </div>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '0.3rem' }}>
+                      Clicking "Complete Purchase" redirects you to BitPay's secure checkout page, where you'll pick your coin and get a deposit address and QR code. You'll be brought back here automatically once payment is confirmed on-chain.
+                    </span>
                   </div>
                 )}
 
-                <button 
-                  type="submit" 
-                  disabled={isProcessing} 
-                  className="neon-button" 
+                <button
+                  type="submit"
+                  disabled={isProcessing || loadingPackage || !matchedPackage}
+                  className="neon-button"
                   style={{
                     marginTop: '1rem',
                     padding: '1.1rem',

@@ -248,79 +248,113 @@ export const usePlatformStore = create<PlatformState>()(
       
       // Sync Actions
       syncWithBackend: async () => {
-        try {
-          const packages = await api.get<ChallengePackage[]>('/dashboard/packages');
-          const accounts = await api.get<TradingAccount[]>('/dashboard/accounts');
-          const payouts = await api.get<PayoutItem[]>('/payouts');
-          const kyc = await api.get<KycSubmission>('/kyc');
-          const tickets = await api.get<SupportTicket[]>('/support/tickets');
-          const affiliateProfile = await api.get<AffiliateInfo>('/affiliates/profile');
-          const txHistory = await api.get<TransactionItem[]>('/payments/history');
+        // Each endpoint is fetched independently via allSettled — a single endpoint failing
+        // (or a fresh account having e.g. no KYC submission yet) must not blank out data from
+        // every OTHER endpoint that succeeded, including the trading accounts list itself.
+        const [
+          packagesResult,
+          accountsResult,
+          payoutsResult,
+          kycResult,
+          ticketsResult,
+          affiliateResult,
+          txHistoryResult
+        ] = await Promise.allSettled([
+          api.get<ChallengePackage[]>('/dashboard/packages'),
+          api.get<TradingAccount[]>('/dashboard/accounts'),
+          api.get<PayoutItem[]>('/payouts'),
+          api.get<KycSubmission>('/kyc'),
+          api.get<SupportTicket[]>('/support/tickets'),
+          api.get<AffiliateInfo>('/affiliates/profile'),
+          api.get<TransactionItem[]>('/payments/history')
+        ]);
 
-          set({
-            challengePackages: packages,
-            // The backend returns raw Postgres rows (snake_case columns), not camelCase —
-            // read from the actual response shape here rather than nonexistent camelCase keys.
-            userAccounts: accounts.map((a: any) => ({
-              id: a.id,
-              name: a.name,
-              status: a.status,
-              phase: a.phase,
-              compliance: a.compliance,
-              violations: Array.isArray(a.violations) ? a.violations : [],
-              balance: parseFloat(a.balance),
-              initialBalance: parseFloat(a.initial_balance),
-              equity: parseFloat(a.equity),
-              leverage: a.leverage,
-              server: a.server,
-              platform: a.platform,
-              createdDate: new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-              winRate: parseFloat(a.win_rate),
-              tradesCount: a.trades_count,
-              profitTarget: parseFloat(a.profit_target),
-              dailyDrawdownLimit: parseFloat(a.daily_drawdown_limit),
-              dailyDrawdownCurrent: parseFloat(a.daily_drawdown_current),
-              maxDrawdownLimit: parseFloat(a.max_drawdown_limit),
-              maxDrawdownCurrent: parseFloat(a.max_drawdown_current),
-              tradingDaysCurrent: a.trading_days_current,
-              tradingDaysRequired: a.trading_days_required,
-              equityHistory: Array.isArray(a.equity_history) ? a.equity_history : []
-            })),
-            recentPayouts: payouts.map(p => ({
-              id: p.id,
-              name: p.name,
-              amount: parseFloat(p.amount as any),
-              method: p.method,
-              time: new Date((p as any).created_at).toLocaleDateString('en-US'),
-              status: p.status,
-              country: p.country
-            })),
-            kycSubmissions: kyc ? [kyc] : [],
-            tickets: tickets.map(t => ({
-              id: t.id,
-              userId: t.userId,
-              subject: t.subject,
-              category: t.category,
-              status: t.status,
-              date: new Date((t as any).created_at).toLocaleDateString('en-US'),
-              messages: t.messages || []
-            })),
-            affiliates: affiliateProfile ? { [affiliateProfile.userId]: affiliateProfile } : {},
-            transactions: txHistory.map(t => ({
-              id: t.id,
-              userId: t.userId,
-              userName: t.userName,
-              userEmail: t.userEmail,
-              amount: parseFloat(t.amount as any),
-              description: t.description,
-              method: t.method,
-              status: t.status,
-              date: new Date((t as any).date).toLocaleDateString('en-US')
-            }))
-          });
-        } catch (error) {
-          console.warn('Sync failed: backend offline or server unreachable, running with mock cache', error);
+        [packagesResult, accountsResult, payoutsResult, kycResult, ticketsResult, affiliateResult, txHistoryResult]
+          .forEach((r) => { if (r.status === 'rejected') console.warn('Sync: one endpoint failed, applying the rest', r.reason); });
+
+        const update: Partial<PlatformState> = {};
+
+        if (packagesResult.status === 'fulfilled') {
+          update.challengePackages = packagesResult.value;
         }
+
+        if (accountsResult.status === 'fulfilled') {
+          // The backend returns raw Postgres rows (snake_case columns), not camelCase —
+          // read from the actual response shape here rather than nonexistent camelCase keys.
+          update.userAccounts = accountsResult.value.map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            status: a.status,
+            phase: a.phase,
+            compliance: a.compliance,
+            violations: Array.isArray(a.violations) ? a.violations : [],
+            balance: parseFloat(a.balance),
+            initialBalance: parseFloat(a.initial_balance),
+            equity: parseFloat(a.equity),
+            leverage: a.leverage,
+            server: a.server,
+            platform: a.platform,
+            createdDate: new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            winRate: parseFloat(a.win_rate),
+            tradesCount: a.trades_count,
+            profitTarget: parseFloat(a.profit_target),
+            dailyDrawdownLimit: parseFloat(a.daily_drawdown_limit),
+            dailyDrawdownCurrent: parseFloat(a.daily_drawdown_current),
+            maxDrawdownLimit: parseFloat(a.max_drawdown_limit),
+            maxDrawdownCurrent: parseFloat(a.max_drawdown_current),
+            tradingDaysCurrent: a.trading_days_current,
+            tradingDaysRequired: a.trading_days_required,
+            equityHistory: Array.isArray(a.equity_history) ? a.equity_history : []
+          }));
+        }
+
+        if (payoutsResult.status === 'fulfilled') {
+          update.recentPayouts = payoutsResult.value.map(p => ({
+            id: p.id,
+            name: p.name,
+            amount: parseFloat(p.amount as any),
+            method: p.method,
+            time: new Date((p as any).created_at).toLocaleDateString('en-US'),
+            status: p.status,
+            country: p.country
+          }));
+        }
+
+        if (kycResult.status === 'fulfilled') {
+          update.kycSubmissions = kycResult.value ? [kycResult.value] : [];
+        }
+
+        if (ticketsResult.status === 'fulfilled') {
+          update.tickets = ticketsResult.value.map(t => ({
+            id: t.id,
+            userId: t.userId,
+            subject: t.subject,
+            category: t.category,
+            status: t.status,
+            date: new Date((t as any).created_at).toLocaleDateString('en-US'),
+            messages: t.messages || []
+          }));
+        }
+
+        if (affiliateResult.status === 'fulfilled') {
+          update.affiliates = affiliateResult.value ? { [affiliateResult.value.userId]: affiliateResult.value } : {};
+        }
+
+        if (txHistoryResult.status === 'fulfilled') {
+          update.transactions = txHistoryResult.value.map(t => ({
+            id: t.id,
+            userId: t.userId,
+            userName: t.userName,
+            userEmail: t.userEmail,
+            amount: parseFloat(t.amount as any),
+            description: t.description,
+            method: t.method,
+            status: t.status,
+            date: new Date((t as any).date).toLocaleDateString('en-US')
+          }));
+        }
+
+        set(update);
       },
 
       syncAdminWithBackend: async () => {

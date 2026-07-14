@@ -76,12 +76,14 @@ async function request<T>(
   if (!res.ok) {
     throw new ApiError(
       res.status,
-      json.error || json.message || `Request failed with status ${res.status}`,
+      json?.error || json?.message || `Request failed with status ${res.status}`,
       json
     );
   }
 
-  return json.data !== undefined ? (json.data as T) : (json as T);
+  // Some endpoints (e.g. GET /kyc with no submission yet) legitimately return a bare `null`
+  // body rather than an object — guard against that before probing for a `.data` envelope.
+  return json != null && json.data !== undefined ? (json.data as T) : (json as T);
 }
 
 export const api = {

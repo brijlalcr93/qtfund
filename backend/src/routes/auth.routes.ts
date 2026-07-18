@@ -12,8 +12,8 @@ const REFRESH_SECRET = process.env.REFRESH_SECRET || JWT_SECRET + '_refresh';
 const REFRESH_EXPIRES_IN = '30d';
 
 function signTokens(payload: { id: string; email: string; role: string; fullName: string }) {
-  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-  const refreshToken = jwt.sign({ id: payload.id }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES_IN });
+  const accessToken = (jwt as any).sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  const refreshToken = (jwt as any).sign({ id: payload.id }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES_IN });
   return { accessToken, refreshToken };
 }
 
@@ -161,7 +161,7 @@ router.post('/reset-password', authRateLimiter, async (req, res) => {
     if (userResult.rows.length > 0) {
       // In production: generate a reset token, store it, and email it.
       // For now, log it server-side.
-      const resetToken = jwt.sign({ id: userResult.rows[0].id, purpose: 'reset' }, JWT_SECRET, { expiresIn: '1h' });
+      const resetToken = (jwt as any).sign({ id: userResult.rows[0].id, purpose: 'reset' }, JWT_SECRET, { expiresIn: '1h' });
       console.log(`[PASSWORD RESET] Token for ${email}: ${resetToken}`);
     }
   } catch (error) {

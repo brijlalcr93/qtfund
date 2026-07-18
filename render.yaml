@@ -16,3 +16,16 @@ services:
         value: https://your-vercel-domain.vercel.app # Update this after deploying frontend
       # Make sure to add these env vars in the Render Dashboard:
       # DB_USER, DB_HOST, DB_DATABASE, DB_PASSWORD, DB_PORT
+
+  - type: static
+    name: antigravity-frontend
+    env: static
+    rootDir: .
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    envVars:
+      - key: NODE_ENV
+        value: production
+    # If you prefer to serve the frontend as a Node web service, change
+    # `type` to `web`, set `env: node` and provide a startCommand that
+    # runs a small static server (e.g. `serve` or a simple Express app).

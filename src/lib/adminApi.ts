@@ -142,6 +142,7 @@ export interface UserItem {
 }
 
 export const adminApi = {
+  get: <T>(path: string) => api.get<T>(path),
   getStats: () => api.get<AdminStats>('/admin/stats'),
   getPayments: (page = 1, limit = 20, status?: string) =>
     api.get<{ payments: PaymentItem[]; pagination: any }>(`/admin/payments?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`),

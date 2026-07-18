@@ -11,9 +11,10 @@ const pool = new Pool({
   database: process.env.DB_DATABASE || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   port: parseInt(process.env.DB_PORT || '5432'),
+  // Force IPv4 for cloud DB hosts when the platform has no IPv6 route.
+  family: 4,
   // SSL is required for Supabase and most cloud PostgreSQL providers
   ssl: isRemote ? { rejectUnauthorized: false } : false,
-  // Prefer IPv4 on cloud platforms when IPv6 is unavailable/restricted.
   keepAlive: true,
 });
 

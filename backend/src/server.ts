@@ -19,6 +19,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3002;
 
+// When running behind proxy services like Render, trust the proxy headers.
+app.set('trust proxy', 1);
+
 // Security and utility middleware
 app.use(helmet());
 app.use(cors({

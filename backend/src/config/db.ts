@@ -13,6 +13,8 @@ const pool = new Pool({
   port: parseInt(process.env.DB_PORT || '5432'),
   // SSL is required for Supabase and most cloud PostgreSQL providers
   ssl: isRemote ? { rejectUnauthorized: false } : false,
+  // Prefer IPv4 on cloud platforms when IPv6 is unavailable/restricted.
+  keepAlive: true,
 });
 
 pool.on('error', (err) => {

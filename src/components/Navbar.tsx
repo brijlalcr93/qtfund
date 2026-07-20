@@ -52,12 +52,11 @@ export default function Navbar() {
         style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
         onClick={() => { navigate('/'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
       >
-        <div style={{
-          fontSize: '2rem',
-          fontWeight: 700,
-          color: 'var(--accent-cyan)',
-          textShadow: '0 0 10px var(--accent-glow)'
-        }}>Q</div>
+        <img
+          src="/logo.png"
+          alt="QT Fund"
+          style={{ height: '70px', width: '70px', objectFit: 'cover', margin: '-20px 0' }}
+        />
       </div>
 
       {/* Nav Links */}

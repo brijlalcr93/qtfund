@@ -245,74 +245,91 @@ export const usePlatformStore = create<PlatformState>()(
       
       // Sync Actions
       syncWithBackend: async () => {
-        try {
-          const packages = await api.get<ChallengePackage[]>('/dashboard/packages');
-          const accounts = await api.get<TradingAccount[]>('/dashboard/accounts');
-          const payouts = await api.get<PayoutItem[]>('/payouts');
-          const kyc = await api.get<KycSubmission>('/kyc');
-          const tickets = await api.get<SupportTicket[]>('/support/tickets');
-          const affiliateProfile = await api.get<AffiliateInfo>('/affiliates/profile');
-          const txHistory = await api.get<TransactionItem[]>('/payments/history');
+        const [
+          packagesRes,
+          accountsRes,
+          payoutsRes,
+          kycRes,
+          ticketsRes,
+          affiliateRes,
+          txRes,
+        ] = await Promise.allSettled([
+          api.get<ChallengePackage[]>('/dashboard/packages'),
+          api.get<TradingAccount[]>('/dashboard/accounts'),
+          api.get<PayoutItem[]>('/payouts'),
+          api.get<KycSubmission>('/kyc'),
+          api.get<SupportTicket[]>('/support/tickets'),
+          api.get<AffiliateInfo>('/affiliates/profile'),
+          api.get<TransactionItem[]>('/payments/history'),
+        ]);
 
-          set({
-            challengePackages: packages,
-            userAccounts: accounts.map(a => ({
-              id: a.id,
-              name: a.name,
-              status: a.status,
-              balance: parseFloat(a.balance as any),
-              initialBalance: parseFloat(a.initialBalance as any),
-              equity: parseFloat(a.equity as any),
-              leverage: a.leverage,
-              server: a.server,
-              platform: a.platform,
-              createdDate: new Date(a.createdDate || (a as any).created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-              winRate: parseFloat(a.winRate as any),
-              tradesCount: a.tradesCount,
-              profitTarget: parseFloat(a.profitTarget as any),
-              dailyDrawdownLimit: parseFloat(a.dailyDrawdownLimit as any),
-              dailyDrawdownCurrent: parseFloat(a.dailyDrawdownCurrent as any),
-              maxDrawdownLimit: parseFloat(a.maxDrawdownLimit as any),
-              maxDrawdownCurrent: parseFloat(a.maxDrawdownCurrent as any),
-              tradingDaysCurrent: a.tradingDaysCurrent,
-              tradingDaysRequired: a.tradingDaysRequired,
-              equityHistory: (a as any).equity_history || a.equityHistory || []
-            })),
-            recentPayouts: payouts.map(p => ({
-              id: p.id,
-              name: p.name,
-              amount: parseFloat(p.amount as any),
-              method: p.method,
-              time: new Date((p as any).created_at).toLocaleDateString('en-US'),
-              status: p.status,
-              country: p.country
-            })),
-            kycSubmissions: kyc ? [kyc] : [],
-            tickets: tickets.map(t => ({
-              id: t.id,
-              userId: t.userId,
-              subject: t.subject,
-              category: t.category,
-              status: t.status,
-              date: new Date((t as any).created_at).toLocaleDateString('en-US'),
-              messages: t.messages || []
-            })),
-            affiliates: affiliateProfile ? { [affiliateProfile.userId]: affiliateProfile } : {},
-            transactions: txHistory.map(t => ({
-              id: t.id,
-              userId: t.userId,
-              userName: t.userName,
-              userEmail: t.userEmail,
-              amount: parseFloat(t.amount as any),
-              description: t.description,
-              method: t.method,
-              status: t.status,
-              date: new Date((t as any).date).toLocaleDateString('en-US')
-            }))
-          });
-        } catch (error) {
-          console.warn('Sync failed: backend offline or server unreachable, running with mock cache', error);
-        }
+        const ok = <T>(r: PromiseSettledResult<T>, fallback: T): T =>
+          r.status === 'fulfilled' ? r.value : fallback;
+
+        const packages = ok(packagesRes, []);
+        const accounts = ok(accountsRes, []);
+        const payouts = ok(payoutsRes, []);
+        const kyc = ok(kycRes, null as unknown as KycSubmission);
+        const tickets = ok(ticketsRes, []);
+        const affiliateProfile = ok(affiliateRes, null as unknown as AffiliateInfo);
+        const txHistory = ok(txRes, []);
+
+        set({
+          challengePackages: packages as ChallengePackage[],
+          userAccounts: (accounts as any[]).map(a => ({
+            id: a.id,
+            name: a.name,
+            status: a.status,
+            balance: parseFloat(a.balance),
+            initialBalance: parseFloat(a.initial_balance ?? a.initialBalance),
+            equity: parseFloat(a.equity),
+            leverage: a.leverage,
+            server: a.server,
+            platform: a.platform,
+            createdDate: new Date(a.createdDate || a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            winRate: parseFloat(a.win_rate ?? a.winRate),
+            tradesCount: a.trades_count ?? a.tradesCount,
+            profitTarget: parseFloat(a.profit_target ?? a.profitTarget),
+            dailyDrawdownLimit: parseFloat(a.daily_drawdown_limit ?? a.dailyDrawdownLimit),
+            dailyDrawdownCurrent: parseFloat(a.daily_drawdown_current ?? a.dailyDrawdownCurrent),
+            maxDrawdownLimit: parseFloat(a.max_drawdown_limit ?? a.maxDrawdownLimit),
+            maxDrawdownCurrent: parseFloat(a.max_drawdown_current ?? a.maxDrawdownCurrent),
+            tradingDaysCurrent: a.trading_days_current ?? a.tradingDaysCurrent,
+            tradingDaysRequired: a.trading_days_required ?? a.tradingDaysRequired,
+            equityHistory: a.equity_history || a.equityHistory || []
+          })),
+          recentPayouts: (payouts as any[]).map(p => ({
+            id: p.id,
+            name: p.name,
+            amount: parseFloat(p.amount),
+            method: p.method,
+            time: new Date(p.created_at).toLocaleDateString('en-US'),
+            status: p.status,
+            country: p.country
+          })),
+          kycSubmissions: kyc ? [kyc] : [],
+          tickets: (tickets as any[]).map(t => ({
+            id: t.id,
+            userId: t.userId ?? t.user_id,
+            subject: t.subject,
+            category: t.category,
+            status: t.status,
+            date: new Date(t.created_at).toLocaleDateString('en-US'),
+            messages: t.messages || []
+          })),
+          affiliates: affiliateProfile ? { [affiliateProfile.userId]: affiliateProfile } : {},
+          transactions: (txHistory as any[]).map(t => ({
+            id: t.id,
+            userId: t.userId ?? t.user_id,
+            userName: t.userName ?? t.user_name,
+            userEmail: t.userEmail ?? t.user_email,
+            amount: parseFloat(t.amount),
+            description: t.description,
+            method: t.method,
+            status: t.status,
+            date: new Date(t.date).toLocaleDateString('en-US')
+          }))
+        });
       },
 
       syncAdminWithBackend: async () => {

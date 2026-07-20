@@ -5,6 +5,7 @@ import { DollarSign, Wallet, ChevronLeft } from 'lucide-react';
 import { usePlatformStore } from '../store/platformStore';
 import type { TradingAccount, TransactionItem } from '../store/platformStore';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 
 type PaymentGateway = 'Stripe' | 'PayPal' | 'Razorpay' | 'Crypto' | 'NOWPayments';
 
@@ -71,31 +72,23 @@ export default function Checkout() {
 
     if (paymentMethod === 'NOWPayments') {
       try {
-        // We assume the backend is hosted at the same origin or configured via proxy
-        const response = await fetch('/api/payments/nowpayments/invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            price_amount: finalPrice,
-            price_currency: 'usd',
-            order_id: 'TXN-' + Math.floor(10000 + Math.random() * 90000),
-            order_description: `Purchase: ${planDetails.size} ${planDetails.type}`
-          })
+        const data = await api.post<any>('/payments/nowpayments/invoice', {
+          price_amount: finalPrice,
+          price_currency: 'usd',
+          order_id: 'TXN-' + Math.floor(10000 + Math.random() * 90000),
+          order_description: `Purchase: ${planDetails.size} ${planDetails.type}`
         });
         
-        if (response.ok) {
-          const data = await response.json();
-          if (data.invoice_url) {
-            window.location.href = data.invoice_url;
-            return;
-          }
+        if (data && data.invoice_url) {
+          window.location.href = data.invoice_url;
+          return;
         } else {
           alert('Failed to generate NOWPayments invoice. Please ensure API key is configured in backend.');
           setIsProcessing(false);
           return;
         }
       } catch (err) {
-        alert('Network error connecting to payment gateway.');
+        alert('Failed to generate NOWPayments invoice or connect to gateway.');
         setIsProcessing(false);
         return;
       }

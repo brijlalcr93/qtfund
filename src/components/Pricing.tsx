@@ -6,25 +6,25 @@ type ChallengeType = '1-Step' | '2-Step' | 'Instant';
 
 const pricingData: Record<ChallengeType, { size: string; price: string }[]> = {
   '1-Step': [
-    { size: '$5,000', price: '$49' },
-    { size: '$10,000', price: '$99' },
-    { size: '$25,000', price: '$199' },
-    { size: '$50,000', price: '$299' },
-    { size: '$100,000', price: '$499' },
+    { size: '$5,000', price: '$35' },
+    { size: '$10,000', price: '$79' },
+    { size: '$25,000', price: '$129' },
+    { size: '$50,000', price: '$199' },
+    { size: '$100,000', price: '$319' },
   ],
   '2-Step': [
-    { size: '$5,000', price: '$39' },
-    { size: '$10,000', price: '$89' },
-    { size: '$25,000', price: '$179' },
-    { size: '$50,000', price: '$279' },
-    { size: '$100,000', price: '$449' },
+    { size: '$5,000', price: '$25' },
+    { size: '$10,000', price: '$66' },
+    { size: '$25,000', price: '$99' },
+    { size: '$50,000', price: '$165' },
+    { size: '$100,000', price: '$249' },
   ],
   'Instant': [
-    { size: '$5,000', price: '$199' },
-    { size: '$10,000', price: '$399' },
-    { size: '$25,000', price: '$899' },
-    { size: '$50,000', price: '$1,699' },
-    { size: '$100,000', price: '$3,199' },
+    { size: '$5,000', price: '$51' },
+    { size: '$10,000', price: '$89' },
+    { size: '$25,000', price: '$149' },
+    { size: '$50,000', price: '$209' },
+    { size: '$100,000', price: '$349' },
   ]
 };
 

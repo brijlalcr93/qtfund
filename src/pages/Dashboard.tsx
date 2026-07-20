@@ -310,8 +310,15 @@ export default function Dashboard() {
   };
 
   const renderView = () => {
+    const noAccountPlaceholder = (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem', color: 'var(--text-secondary)' }}>
+        <p style={{ fontSize: '1.2rem' }}>No trading accounts found.</p>
+        <p style={{ fontSize: '0.95rem' }}>Purchase a challenge to get started.</p>
+      </div>
+    );
     switch (activeView) {
       case 'Overview':
+        if (!selectedAccount) return noAccountPlaceholder;
         return (
           <motion.div
             key="overview"
@@ -648,6 +655,7 @@ export default function Dashboard() {
         );
 
       case 'Trading Terminal':
+        if (!selectedAccount) return noAccountPlaceholder;
         return (
           <motion.div
             key="terminal"
@@ -1477,6 +1485,7 @@ export default function Dashboard() {
         );
 
       case 'Statistics': {
+        if (!selectedAccount) return noAccountPlaceholder;
         const pf = selectedAccount.winRate > 0 ? (selectedAccount.winRate / (100 - selectedAccount.winRate + 5) * 1.5).toFixed(2) : '0.00';
         const rr = "1:1.75";
         const avgWin = (selectedAccount.initialBalance * 0.012).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -1586,7 +1595,8 @@ export default function Dashboard() {
       }
 
       case 'Certificates': {
-        const hasPassed = selectedAccount.status === 'Funded' || 
+        if (!selectedAccount) return noAccountPlaceholder;
+        const hasPassed = selectedAccount.status === 'Funded' ||
           (selectedAccount.profitTarget > 0 && selectedAccount.balance >= selectedAccount.initialBalance + selectedAccount.profitTarget);
 
         return (
@@ -1817,6 +1827,7 @@ export default function Dashboard() {
       }
 
       case 'Payout Requests': {
+        if (!selectedAccount) return noAccountPlaceholder;
         const isFunded = selectedAccount.status === 'Funded';
         const profit = selectedAccount.balance - selectedAccount.initialBalance;
 

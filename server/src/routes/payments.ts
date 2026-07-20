@@ -378,4 +378,79 @@ router.post('/webhook/stripe', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/nowpayments/invoice', async (req: Request, res: Response) => {
+  try {
+    const { price_amount, price_currency, order_id, order_description } = req.body;
+    const apiKey = process.env.NOWPAYMENTS_API_KEY;
+
+    if (!apiKey) {
+      res.status(500).json({ message: 'NOWPayments API key not configured' });
+      return;
+    }
+
+    const response = await fetch('https://api.nowpayments.io/v1/invoice', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        price_amount,
+        price_currency,
+        order_id,
+        order_description,
+        ipn_callback_url: process.env.PUBLIC_URL ? `${process.env.PUBLIC_URL}/api/payments/webhook/nowpayments` : undefined,
+        success_url: process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/dashboard` : undefined,
+        cancel_url: process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/checkout` : undefined
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('NOWPayments API error', { error: errorText });
+      res.status(500).json({ message: 'Failed to create NOWPayments invoice' });
+      return;
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    logger.error('NOWPayments invoice error', { error });
+    res.status(500).json({ message: 'Failed to generate invoice' });
+  }
+});
+
+router.post('/webhook/nowpayments', async (req: Request, res: Response) => {
+  try {
+    const secret = process.env.NOWPAYMENTS_IPN_SECRET;
+    const sig = req.headers['x-nowpayments-sig'] as string;
+
+    if (!secret || !sig) {
+      res.status(400).json({ message: 'Missing secret or signature' });
+      return;
+    }
+
+    // Verify signature
+    const hmac = crypto.createHmac('sha512', secret);
+    hmac.update(JSON.stringify(req.body));
+    const expectedSig = hmac.digest('hex');
+
+    if (sig !== expectedSig) {
+      res.status(400).json({ message: 'Invalid signature' });
+      return;
+    }
+
+    const { payment_status, order_id } = req.body;
+    if (payment_status === 'finished') {
+      logger.info('NOWPayments payment finished', { order_id });
+      // In a real integration, we would update the payment record here and provision the account
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    logger.error('NOWPayments webhook error', { error });
+    res.status(500).json({ message: 'Webhook processing failed' });
+  }
+});
+
 export default router;

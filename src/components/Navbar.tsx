@@ -5,10 +5,10 @@ import NotificationCenter from './NotificationCenter';
 
 export default function Navbar() {
   const navItems = [
-    { name: 'Home', path: '/', isScroll: true },
-    { name: 'Payouts', path: '/payouts', isScroll: false },
-    { name: 'FAQ', path: '/faq', isScroll: false },
-    { name: 'Blog', path: '/blog', isScroll: false },
+    { name: 'Home', path: '/', isScroll: true, targetId: 'home' },
+    { name: 'Services', path: '/#services', isScroll: true, targetId: 'services' },
+    { name: 'Markets', path: '/#markets', isScroll: true, targetId: 'markets' },
+    { name: 'Pricing', path: '/#pricing', isScroll: true, targetId: 'pricing' },
     { name: 'Contact', path: '/contact', isScroll: false }
   ];
   const navigate = useNavigate();
@@ -21,10 +21,18 @@ export default function Navbar() {
       if (location.pathname !== '/') {
         navigate('/');
         setTimeout(() => {
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          if (item.targetId) {
+            document.getElementById(item.targetId)?.scrollIntoView({ behavior: 'smooth' });
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
         }, 100);
       } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (item.targetId) {
+          document.getElementById(item.targetId)?.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
       }
     } else {
       navigate(item.path);

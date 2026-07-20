@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { db } from '../config/db';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import crypto from 'crypto';

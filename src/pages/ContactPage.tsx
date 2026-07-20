@@ -15,7 +15,7 @@ interface Message {
 export default function ContactPage() {
   const { user } = useAuth();
   const { addTicket } = usePlatformStore();
-  
+
   // Contact Form State
   const [formName, setFormName] = useState(user?.fullName || '');
   const [formEmail, setFormEmail] = useState(user?.email || '');
@@ -43,7 +43,7 @@ export default function ContactPage() {
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Log ticket in store
     const ticketId = 'TKT-' + Math.floor(1000 + Math.random() * 9000);
     const newTicket: SupportTicket = {
@@ -73,7 +73,7 @@ export default function ContactPage() {
 
     const userText = chatInput;
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    
+
     const newMessages = [...chatMessages, { sender: 'User' as const, text: userText, time: timeStr }];
     setChatMessages(newMessages);
     setChatInput('');
@@ -82,7 +82,7 @@ export default function ContactPage() {
     // Simulated chatbot intelligence logic
     setTimeout(() => {
       let replyText = "Thank you for reaching out. A client support coordinator is reviewing this. In the meantime, you can review our rules under the FAQ panel.";
-      
+
       const query = userText.toLowerCase();
       if (query.includes('drawdown') || query.includes('limit') || query.includes('breach')) {
         replyText = "Drawdown rules are calculated based on your starting balance of the day (5% daily drawdown) and 10% maximum overall equity drawdown. Daily reset is at 00:00 UTC.";
@@ -91,7 +91,7 @@ export default function ContactPage() {
       } else if (query.includes('platform') || query.includes('mt5') || query.includes('terminal')) {
         replyText = "We offer simulated MT5 access. The credentials for your purchased evaluation accounts are located on your dashboard's Accounts panel.";
       } else if (query.includes('price') || query.includes('cost') || query.includes('fee')) {
-        replyText = "We offer evaluations starting from $39 (for $5k challenges) up to $449 (for $100k challenges). You can view details on our Homepage pricing table.";
+        replyText = "We offer evaluations starting from $25 (for $5k challenges) up to $349 (for $100k challenges). You can view details on our Homepage pricing table.";
       } else if (query.includes('leverage')) {
         replyText = "Our leverage is 1:100 for evaluation models (1-step and 2-step) and 1:50 for Instant funding tracks.";
       } else if (query.includes('hello') || query.includes('hi') || query.includes('hey')) {
@@ -105,7 +105,7 @@ export default function ContactPage() {
 
   return (
     <div style={{ width: '100%', minHeight: '100vh', paddingTop: '100px', display: 'flex', flexDirection: 'column' }}>
-      
+
       {/* Page Header */}
       <div className="scroll-section" style={{ minHeight: 'auto', paddingBottom: '2rem', gap: '1rem', textAlign: 'center' }}>
         <span style={{ color: 'var(--accent-cyan)', fontSize: '0.9rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Get In Touch</span>
@@ -128,10 +128,10 @@ export default function ContactPage() {
         gap: '2.5rem',
         boxSizing: 'border-box'
       }}>
-        
+
         {/* Left Side: Contact details & Form */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
-          
+
           {/* Info cards */}
           <div style={{
             display: 'grid',
@@ -187,7 +187,7 @@ export default function ContactPage() {
             </h3>
 
             {formSuccess && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 style={{
@@ -221,8 +221,8 @@ export default function ContactPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label style={labelStyle}>Category</label>
-                  <select 
-                    value={formCategory} 
+                  <select
+                    value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
                     style={selectStyle}
                   >
@@ -240,13 +240,13 @@ export default function ContactPage() {
 
               <div>
                 <label style={labelStyle}>Message Details</label>
-                <textarea 
-                  rows={5} 
-                  placeholder="Detail your request. Provide logs or server numbers if applicable..." 
-                  value={formMessage} 
-                  onChange={(e) => setFormMessage(e.target.value)} 
-                  style={textareaStyle} 
-                  required 
+                <textarea
+                  rows={5}
+                  placeholder="Detail your request. Provide logs or server numbers if applicable..."
+                  value={formMessage}
+                  onChange={(e) => setFormMessage(e.target.value)}
+                  style={textareaStyle}
+                  required
                 />
               </div>
 
@@ -326,7 +326,7 @@ export default function ContactPage() {
             {chatMessages.map((msg, idx) => {
               const isUser = msg.sender === 'User';
               return (
-                <div 
+                <div
                   key={idx}
                   style={{
                     display: 'flex',
@@ -356,7 +356,7 @@ export default function ContactPage() {
                 </div>
               );
             })}
-            
+
             {agentTyping && (
               <div style={{ alignSelf: 'flex-start', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Quantum Bot is typing...</span>

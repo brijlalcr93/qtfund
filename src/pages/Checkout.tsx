@@ -6,7 +6,7 @@ import { usePlatformStore } from '../store/platformStore';
 import type { TradingAccount, TransactionItem } from '../store/platformStore';
 import { useAuth } from '../contexts/AuthContext';
 
-type PaymentGateway = 'Stripe' | 'PayPal' | 'Razorpay' | 'Crypto';
+type PaymentGateway = 'Stripe' | 'PayPal' | 'Razorpay' | 'Crypto' | 'NOWPayments';
 
 export default function Checkout() {
   const location = useLocation();
@@ -19,7 +19,7 @@ export default function Checkout() {
   const planDetails = location.state || {
     type: '2-Step Challenge',
     size: '$100,000',
-    price: '$449'
+    price: '$249'
   };
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentGateway>('Stripe');
@@ -65,9 +65,41 @@ export default function Checkout() {
     }
   };
 
-  const handleCompletePurchase = (e: React.FormEvent) => {
+  const handleCompletePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
+
+    if (paymentMethod === 'NOWPayments') {
+      try {
+        // We assume the backend is hosted at the same origin or configured via proxy
+        const response = await fetch('/api/payments/nowpayments/invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            price_amount: finalPrice,
+            price_currency: 'usd',
+            order_id: 'TXN-' + Math.floor(10000 + Math.random() * 90000),
+            order_description: `Purchase: ${planDetails.size} ${planDetails.type}`
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.invoice_url) {
+            window.location.href = data.invoice_url;
+            return;
+          }
+        } else {
+          alert('Failed to generate NOWPayments invoice. Please ensure API key is configured in backend.');
+          setIsProcessing(false);
+          return;
+        }
+      } catch (err) {
+        alert('Network error connecting to payment gateway.');
+        setIsProcessing(false);
+        return;
+      }
+    }
 
     setTimeout(() => {
       // Create new trading account
@@ -276,7 +308,7 @@ export default function Checkout() {
               {/* Gateway Tabs */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
+                gridTemplateColumns: 'repeat(5, 1fr)',
                 gap: '0.5rem',
                 marginBottom: '2rem',
                 background: 'rgba(255,255,255,0.02)',
@@ -284,7 +316,7 @@ export default function Checkout() {
                 borderRadius: '12px',
                 border: '1px solid var(--glass-border)'
               }}>
-                {(['Stripe', 'PayPal', 'Razorpay', 'Crypto'] as PaymentGateway[]).map((gateway) => (
+                {(['Stripe', 'PayPal', 'Razorpay', 'Crypto', 'NOWPayments'] as PaymentGateway[]).map((gateway) => (
                   <button
                     key={gateway}
                     type="button"
@@ -387,6 +419,27 @@ export default function Checkout() {
                     <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 500 }}>PayPal Integration Sandbox</span>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
                       Upon clicking complete purchase, you will be redirected to the secure PayPal simulated gateway to authorize this evaluation fee transfer.
+                    </p>
+                  </div>
+                )}
+
+                {/* NOWPayments fields */}
+                {paymentMethod === 'NOWPayments' && (
+                  <div style={{
+                    padding: '2rem',
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px dashed var(--glass-border)',
+                    borderRadius: '12px',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1rem',
+                    alignItems: 'center'
+                  }}>
+                    <Wallet size={32} style={{ color: 'var(--accent-cyan)' }} />
+                    <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 500 }}>Pay with Crypto (NOWPayments)</span>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                      Upon clicking complete purchase, you will be redirected to the secure NOWPayments hosted gateway to complete your crypto transfer.
                     </p>
                   </div>
                 )}

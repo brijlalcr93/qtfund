@@ -41,7 +41,7 @@ export default function LiveStats() {
   ];
 
   return (
-    <div id="live-stats" className="scroll-section" style={{ minHeight: '50vh', gap: '3rem' }}>
+    <div id="markets" className="scroll-section" style={{ minHeight: '50vh', gap: '3rem' }}>
       <div style={{ textAlign: 'center', maxWidth: '800px' }}>
         <span style={{ color: 'var(--accent-cyan)', fontSize: '0.9rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Institutional Metrics</span>
         <h2 style={{ fontSize: 'clamp(2.2rem, 4vw, 3.5rem)', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.5rem', marginBottom: '1rem', letterSpacing: '-0.02em' }}>

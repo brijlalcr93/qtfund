@@ -23,7 +23,7 @@ export default function Checkout() {
     price: '$249'
   };
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentGateway>('Stripe');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentGateway>('NOWPayments');
   const [couponCode, setCouponCode] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -309,7 +309,7 @@ export default function Checkout() {
                 borderRadius: '12px',
                 border: '1px solid var(--glass-border)'
               }}>
-                {(['Stripe', 'PayPal', 'Razorpay', 'Crypto', 'NOWPayments'] as PaymentGateway[]).map((gateway) => (
+                {(['NOWPayments'] as PaymentGateway[]).map((gateway) => (
                   <button
                     key={gateway}
                     type="button"

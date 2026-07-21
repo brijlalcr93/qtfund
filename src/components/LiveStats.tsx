@@ -52,7 +52,7 @@ export default function LiveStats() {
         </p>
       </div>
 
-      {/* <div style={{
+      <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
         gap: '2rem',
@@ -106,7 +106,7 @@ export default function LiveStats() {
             </motion.div>
           );
         })}
-      </div> */}
+      </div>
     </div>
   );
 }

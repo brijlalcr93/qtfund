@@ -18,7 +18,7 @@ export default function Home() {
       <ProfitSplit />
       <Features />
       <WhyChooseUs />
-      <LiveStats />
+      {/* <LiveStats /> */}
       <Testimonials />
       <CTA />
       <Footer />
